@@ -1,42 +1,31 @@
-const API_ROOT = '/api/v1';
+const MOCK = new URLSearchParams(location.search).get('mock') === '1';
+export const isMock = MOCK;
+let mockMod;
+async function mock() { return (mockMod ??= await import('./mock.js')); }
 
-async function request(path, options = {}) {
-  let response;
-  try {
-    response = await fetch(`${API_ROOT}${path}`, options);
-  } catch (error) {
-    console.error('DustNav network error:', error);
-    throw new Error('Sem comunicação com o núcleo local do DustNav.');
+async function http(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.'); }
+  let body = null;
+  try { body = await res.json(); } catch { /* ignora */ }
+  if (!res.ok) {
+    const d = body && body.detail;
+    throw new Error(typeof d === 'string' ? d : Array.isArray(d) ? 'Requisição inválida. Confira os pontos escolhidos.' : `Erro do servidor (${res.status}).`);
   }
-
-  let payload = null;
-  try { payload = await response.json(); } catch { /* non-JSON response */ }
-  if (!response.ok) {
-    const message = payload?.error || 'O núcleo local não conseguiu concluir a operação.';
-    const error = new Error(message);
-    error.code = payload?.code;
-    error.status = response.status;
-    throw error;
-  }
-  return payload;
+  return body;
 }
 
-export const api = {
-  health: () => request('/health'),
-  layers: () => request('/layers'),
-  routes: (originId, destinationId) => request('/routes/calculate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ origin_id: originId, destination_id: destinationId })
-  }),
-  addCommunityNode: (label, category, lon, lat) => request('/community/nodes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label, category, lon, lat })
-  }),
-  addSonar: (name, description, threatLevel, center, edge) => request('/sonars', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description, threat_level: threatLevel, center, edge })
-  })
-};
+export async function getMeta() { return MOCK ? (await mock()).meta() : http('/api/meta'); }
+export async function geocode(q, signal) {
+  return MOCK ? (await mock()).geocode(q) : http(`/api/geocode?q=${encodeURIComponent(q)}`, { signal });
+}
+export async function postRoutes(payload) {
+  return MOCK ? (await mock()).routes(payload) : http('/api/routes', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+}
+export async function getRisk(bbox, mode, period, signal) {
+  const qs = new URLSearchParams({ bbox: bbox.join(','), mode, period });
+  return MOCK ? (await mock()).risk(bbox, mode, period) : http(`/api/risk?${qs}`, { signal });
+}

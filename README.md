@@ -1,263 +1,161 @@
-# DustNav
+# SampaNav
 
-O DustNav é uma aplicação local de planejamento de rotas para um cenário de
-sobrevivência. O sistema representa o território como um grafo, calcula caminhos
-entre setores e compara distância com exposição a terreno hostil, regiões de
-risco e sonares.
+O SampaNav sugere rotas a pé ou de carro pela cidade de São Paulo que equilibram
+**tempo de deslocamento** e **exposição a ocorrências criminais** registradas pela
+SSP-SP. Para cada trajeto são mostradas até três opções:
 
-A aplicação é executada por um servidor Node.js sem dependências externas e
-inclui uma interface responsiva construída com HTML, CSS, JavaScript e SVG.
+- **Mais rápida**: menor tempo, sem considerar risco;
+- **Equilibrada**: compromisso entre tempo e exposição;
+- **Mais segura**: menor exposição, aceitando desvios maiores.
 
-## Funcionalidades
+O mapa também exibe uma camada de calor com o risco por região, que pode ser
+filtrado por período do dia (madrugada, manhã, tarde, noite).
 
-- Mapa interativo com zoom, deslocamento e seleção de setores.
-- Grafo de navegação formado por nós e corredores conectados.
-- Destaque visual para origem, destino e nós intermediários da rota.
-- Regiões territoriais com limites semelhantes a divisões administrativas.
-- Sonares animados que se expandem do centro até o alcance máximo.
-- Três níveis de sonar:
-  - verde: risco baixo;
-  - amarelo/laranja: risco moderado;
-  - vermelho: risco alto.
-- Duas estratégias calculadas para cada travessia:
-  - **Rota direta:** considera somente a menor distância durante a escolha do caminho;
-  - **Maior sobrevivência:** minimiza a exposição a sonares, zonas e outros perigos.
-- Cálculo de chance de sobrevivência, tempo, combustível e exposição.
-- Cadastro de pontos comunitários ligados automaticamente ao grafo.
-- Cadastro de zonas de perigo no formato de novos sonares.
-- Persistência local dos registros comunitários.
-- Randomização dos sonares nativos a cada inicialização do servidor.
+## Limitações e uso responsável
+
+Leia antes de usar ou apresentar os resultados.
+
+- **Os dados refletem ocorrências registradas, não o risco real.** Um boletim de
+  ocorrência é um indicador imperfeito do que de fato acontece nas ruas.
+- **A subnotificação varia entre regiões.** Locais onde as pessoas registram menos
+  boletins parecem mais seguros do que são.
+- **Áreas movimentadas têm mais registros, em parte por causa do fluxo de
+  pessoas.** O Centro, por exemplo, concentra muitas ocorrências também porque
+  recebe muito mais gente. Mais registros não significam necessariamente mais
+  risco por pessoa.
+- **Não use a ferramenta para estigmatizar bairros.** A interface não rotula
+  regiões como "perigosas" e o aviso permanente deve ser mantido.
+- **Crimes sexuais não entram no modelo.** Na fonte, esses registros vêm sem
+  localização (campos zerados e logradouro ocultado), então não há como
+  representá-los no mapa.
+- **Este projeto não substitui julgamento próprio nem orientação de segurança
+  pública.** Em caso de emergência, procure os canais oficiais.
+
+## Fontes de dados
+
+- **SSP-SP, "Dados criminais"** (planilhas anuais em `.xlsx`):
+  <https://www.ssp.sp.gov.br/estatistica/consultas>. Cada ano ocupa cerca de
+  126 a 196 MB.
+- **OpenStreetMap**, via [OSMnx](https://github.com/gboeing/osmnx), para a rede
+  de ruas a pé e de carro.
+- **Photon (komoot)** para geocodificação de endereços, restrita à bbox de São Paulo.
+- **OpenFreeMap** para os tiles do mapa base.
+- **dadoscrimesp.com.br**: referência complementar com dados agregados por
+  delegacia. Serve como contexto e **não é usado no roteamento**.
+
+## Como funciona
+
+1. **Pipeline (offline)**: baixa as planilhas da SSP-SP, filtra ocorrências da
+   capital com coordenadas válidas e as classifica em categorias.
+2. **Modelo de risco**: agrega as ocorrências em uma grade H3 (resolução 9,
+   ~174 m de aresta). Cada ocorrência soma um peso por categoria e modo
+   (a pé ou carro), com decaimento temporal (meia-vida de 12 meses, janela de
+   24 meses), por período do dia. A pontuação é normalizada em escala logarítmica
+   entre 0 e 1.
+3. **Grafo viário**: a rede do OSM recebe, em cada trecho, tempo de percurso e o
+   risco médio para cada período.
+4. **Roteamento**: Dijkstra (igraph) com custo `tempo × (1 + α · risco)`. Os
+   perfis usam α = 0 (mais rápida), 2 (equilibrada) e 6 (mais segura). Rotas
+   quase idênticas são descartadas, e alternativas só aparecem se reduzirem a
+   exposição em pelo menos 5%.
+5. **API** em FastAPI, que também serve o frontend.
+6. **Frontend** estático (MapLibre GL JS e h3-js), sem etapa de build.
+
+O contrato completo entre as partes (formato de dados, esquema da API, regras
+de risco) está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
 ## Requisitos
 
-- [Node.js](https://nodejs.org/) 18 ou mais recente.
-- Um navegador moderno com suporte a módulos JavaScript e SVG.
+- [Python](https://www.python.org/) 3.11 ou mais recente.
+- [uv](https://docs.astral.sh/uv/) para gerenciar dependências e executar os scripts.
+- Espaço em disco: as planilhas da SSP somam centenas de MB por ano, e os
+  arquivos intermediários e grafos ocupam mais espaço.
+- Tempo: a primeira construção do grafo a partir do OSM leva cerca de 10 a 15
+  minutos.
+- Conexão com a internet para baixar dados e para geocodificação e tiles em uso.
 
-Fora do mapa global de países (`world.html`), que usa D3.js e o dataset
-`world-atlas` vendorizados em `frontend/vendor/`, o projeto não utiliza
-bibliotecas externas em tempo de execução.
+## Instalação e execução
 
-## Como executar
-
-Clone ou copie o projeto e, no diretório raiz, execute:
-
-```bash
-cd backend
-npm install
-npm start
-```
-
-Abra [http://localhost:3000](http://localhost:3000) no navegador.
-
-Também é possível iniciar diretamente pela raiz:
+Execute os comandos na raiz do projeto:
 
 ```bash
-node backend/server.js
+uv sync
+uv run python -m pipeline.download_ssp --years 2025 2026
+uv run python -m pipeline.build_risk
+uv run python -m pipeline.build_graph
+uv run uvicorn backend.app.main:app --reload
 ```
 
-### Usar outra porta
+Depois, abra <http://localhost:8000> no navegador. O uvicorn usa a porta 8000
+por padrão.
 
-No PowerShell:
+### Comandos úteis
 
-```powershell
-$env:PORT=3001
-npm start
-```
+- **Refazer só o risco**, depois de reconstruir o modelo de risco, sem reprocessar
+  o OSM (reutiliza `graph_{mode}.npz` já existente):
 
-No Bash:
+  ```bash
+  uv run python -m pipeline.build_graph --risk-only
+  ```
 
-```bash
-PORT=3001 npm start
-```
+- **Testes**:
 
-## Como usar
+  ```bash
+  uv run pytest
+  ```
 
-0. Ao abrir o sistema, selecione um território no mapa global de operações — por enquanto
-   qualquer território leva à mesma cartografia local, com um efeito de zoom até a página
-   de setores (`scar.html`).
-1. Escolha a origem e o destino clicando nos nós ou utilizando os campos de busca.
-2. Selecione **Calcular rotas**.
-3. Compare a rota direta com a rota de maior sobrevivência.
-4. Clique em uma alternativa para exibi-la no mapa.
-
-Os nós intermediários da alternativa ativa são destacados em laranja.
-
-### Adicionar um ponto comunitário
-
-Em **Inteligência de campo**, escolha recurso, abrigo ou local. Clique no mapa,
-informe um nome e registre o ponto. O backend conecta o novo nó aos dois setores
-mais próximos.
-
-### Adicionar uma zona de perigo
-
-1. Abra **Inteligência de campo → Zona de perigo**.
-2. Selecione **Adicionar sonar**.
-3. Clique no mapa para definir o centro.
-4. Clique novamente para definir o alcance.
-5. Escolha o nível de risco, informe o nome e registre.
-
-O alcance aceito fica entre `0,5 km` e `12 km`. O sonar entra imediatamente no
-cálculo de sobrevivência e pode alterar a rota segura recomendada.
-
-## Como as rotas são calculadas
-
-O motor utiliza Dijkstra com pesos diferentes para cada estratégia:
-
-- **Direta:** o peso de cada aresta é somente sua distância em quilômetros.
-- **Maior sobrevivência:** o peso combina perigo do corredor, terreno, exposição
-  às regiões, pontos de apoio e exposição aos sonares.
-
-A influência das regiões é reduzida. Os sonares são o fator de maior peso, e seu
-impacto cresce conforme o nível:
-
-| Nível | Cor | Influência |
-|---|---|---|
-| `tier_1` | Verde | Baixa |
-| `tier_2` | Amarelo/laranja | Moderada |
-| `tier_3` | Vermelho | Alta |
-
-A rota direta ignora esses riscos ao escolher o caminho, mas seu percentual de
-sobrevivência ainda mostra os perigos realmente atravessados.
-
-## Randomização dos sonares
-
-Ao iniciar o backend, os sonares nativos recebem uma nova configuração:
-
-- deslocamento entre `1,5 km` e `4,5 km`;
-- variação de raio entre `5%` e `13%`;
-- redistribuição das três cores de risco;
-- distância mínima entre centros para evitar aglomerações excessivas.
-
-O mapa e o motor de rotas usam a mesma configuração mantida em memória. Portanto,
-é necessário reiniciar o servidor para gerar outra distribuição. Os sonares
-criados pela comunidade mantêm os dados com que foram registrados.
-
-## Estrutura do projeto
-
-```text
-DustNav/
-├── backend/
-│   ├── data/
-│   │   ├── nodes.geojson          # setores do grafo
-│   │   ├── edges.geojson          # corredores entre setores
-│   │   ├── zones.geojson          # regiões e sonares nativos
-│   │   └── community-zones.json   # perigos comunitários persistidos
-│   ├── routing-engine.js          # cálculo de rotas e sobrevivência
-│   ├── routing-engine.test.js     # testes automatizados
-│   ├── sonar-randomizer.js        # randomização dos sonares nativos
-│   └── server.js                  # servidor HTTP, API e arquivos estáticos
-├── frontend/
-│   ├── css/                       # estilos da interface e do mapa
-│   ├── js/
-│   │   ├── map/                   # projeção e renderização SVG
-│   │   ├── ui/                    # painel e resultados
-│   │   ├── api.js                 # cliente da API
-│   │   ├── app.js                 # fluxo principal
-│   │   ├── state.js               # estado da aplicação
-│   │   └── world.js               # seleção de território no mapa global
-│   ├── vendor/                     # D3.js, TopoJSON e dataset de países (world-atlas)
-│   ├── world.html                 # página inicial — mapa global de países
-│   └── scar.html                  # página de setores, rotas e zonas
-├── public/                        # recursos estáticos
-└── README.md
-```
-
-O arquivo `backend/data/community.json` é criado quando o primeiro ponto
-comunitário é registrado.
+- **Desenvolvimento só do frontend**: abra <http://localhost:8000/?mock=1>. Nesse
+  modo, `frontend/js/api.js` usa respostas falsas de `frontend/js/mock.js` em vez
+  de chamar a API, o que permite trabalhar na interface sem os dados processados.
 
 ## API
 
-Todas as rotas usam o prefixo `/api/v1`.
+Todos os endpoints ficam sob o prefixo `/api`. O formato detalhado de cada um
+está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md), seção 5.
 
-### Estado do sistema
+- `GET /api/health`: status do servidor e tamanho dos grafos carregados.
+- `GET /api/meta`: metadados do modelo de risco, perfis e períodos disponíveis.
+- `GET /api/geocode?q=...`: busca de endereços dentro de São Paulo.
+- `POST /api/routes`: calcula as rotas entre origem e destino, para um modo e período.
+- `GET /api/risk?bbox=...&mode=...&period=...`: células H3 com risco, para a camada de calor.
 
-```http
-GET /api/v1/health
+## Estrutura do projeto
+
+```
+SampaNav/
+├── pyproject.toml          # projeto Python único (uv)
+├── uv.lock
+├── docs/
+│   └── ARQUITETURA.md      # contrato entre pipeline, API e frontend
+├── pipeline/               # scripts offline
+│   ├── config.py           # pesos, categorias, períodos e caminhos
+│   ├── download_ssp.py     # baixa as planilhas da SSP-SP
+│   ├── build_risk.py       # ocorrências -> grade H3 de risco
+│   └── build_graph.py      # rede OSM + risco -> grafos por modo
+├── backend/
+│   ├── app/
+│   │   ├── main.py         # FastAPI; também serve o frontend em /
+│   │   ├── routing.py      # carga dos grafos e cálculo de rotas
+│   │   └── geocode.py      # proxy para o Photon, com bbox de SP
+│   └── tests/
+├── frontend/               # HTML, CSS e JS estáticos, sem build
+│   ├── index.html
+│   ├── img/logo.svg        # logo e favicon
+│   ├── css/
+│   └── js/
+│       ├── api.js          # chamadas à API (ou mock, com ?mock=1)
+│       ├── mock.js         # respostas falsas para desenvolvimento
+│       ├── map.js          # mapa, rotas e camada de calor
+│       ├── ui.js           # painel, busca e cartões de rota
+│       ├── format.js
+│       └── main.js
+└── data/                   # gitignored
+    ├── raw/                # planilhas da SSP e arquivos do OSM
+    └── processed/          # saídas do pipeline (parquet, npz, json)
 ```
 
-### Camadas do mapa
+## Créditos
 
-```http
-GET /api/v1/layers
-```
-
-Retorna nós, arestas, regiões e sonares em GeoJSON.
-
-### Calcular rotas
-
-```http
-POST /api/v1/routes/calculate
-Content-Type: application/json
-```
-
-```json
-{
-  "origin_id": "node_canyon_hideout",
-  "destination_id": "node_dead_pass"
-}
-```
-
-### Adicionar ponto comunitário
-
-```http
-POST /api/v1/community/nodes
-Content-Type: application/json
-```
-
-```json
-{
-  "label": "Abrigo da ponte",
-  "category": "seguro",
-  "lon": 138.5,
-  "lat": -30.3
-}
-```
-
-As categorias aceitas são `recurso`, `seguro` e `comum`.
-
-### Adicionar sonar de perigo
-
-```http
-POST /api/v1/sonars
-Content-Type: application/json
-```
-
-```json
-{
-  "name": "Radar dos saqueadores",
-  "description": "Sinal móvel detectado no corredor.",
-  "threat_level": "tier_3",
-  "center": [138.6, -30.3],
-  "edge": [138.65, -30.3]
-}
-```
-
-`center` define o centro e `edge` um ponto na borda. O servidor calcula o raio
-geográfico entre eles.
-
-## Testes
-
-Na pasta `backend`, execute:
-
-```bash
-npm test
-```
-
-A suíte cobre carregamento do grafo, validações, rotas direta e segura, exposição
-parcial, zonas críticas, sonares, randomização, pontos comunitários e o conjunto
-GeoJSON real.
-
-## Persistência
-
-Os pontos e sonares criados pela interface são armazenados em arquivos JSON
-locais dentro de `backend/data`. O projeto não utiliza banco de dados nem serviço
-externo.
-
-## Tecnologias
-
-- Node.js (`http` e `fs` nativos)
-- JavaScript com módulos ES no frontend
-- HTML5 e CSS responsivo
-- SVG para grafo, regiões, rotas e animações
-- GeoJSON para nós, arestas e zonas
-- D3.js e TopoJSON (vendorizados) para o mapa global de países em `world.html`
+O SampaNav nasceu de um protótipo desenvolvido em hackathon (DustNav), feito
+pela equipe original do projeto. A versão atual é uma reescrita focada em
+roteamento com dados criminais reais de São Paulo.

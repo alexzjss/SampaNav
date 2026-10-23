@@ -1,0 +1,27 @@
+[project]
+name = "sampanav"
+version = "0.1.0"
+description = "Roteamento seguro a pé e de carro na cidade de São Paulo"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "openpyxl",
+    "h3>=4",
+    "osmnx>=2",
+    "python-igraph",
+    "scipy",
+    "shapely",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.uv]
+package = false
