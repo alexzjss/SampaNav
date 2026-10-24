@@ -6,7 +6,12 @@ import numpy as np
 import pytest
 
 from pipeline.build_risk import (
-    classify, decay_weight, norm_text, parse_hour, period_from_desc, period_from_hour,
+    classify,
+    decay_weight,
+    norm_text,
+    parse_hour,
+    period_from_desc,
+    period_from_hour,
 )
 
 VP = "Via Pública"
@@ -91,6 +96,7 @@ def test_decay_weight():
 
 def test_normalize_risk_log_scale():
     import numpy as np
+
     from pipeline.build_risk import normalize_risk
 
     score = np.array([0.0, 1.0, 10.0, 100.0, 1000.0, 5000.0])

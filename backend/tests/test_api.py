@@ -47,10 +47,16 @@ def test_routes_contract(client):
     for rt in j["routes"]:
         assert set(rt) >= {
             "id", "label", "alpha", "distance_m", "duration_s", "exposure", "avg_risk",
-            "risk_level", "vs_fastest", "categories", "geometry", "segments",
+            "risk_level", "vs_fastest", "categories", "geometry", "segments", "steps",
         }
         assert rt["geometry"]["type"] == "LineString"
         assert rt["segments"][0]["coordinates"] and "risk" in rt["segments"][0]
+        st = rt["steps"]
+        assert st[0]["maneuver"] == "depart" and st[-1]["maneuver"] == "arrive"
+        assert set(st[0]) == {
+            "maneuver", "instruction", "street", "distance_m", "duration_s", "location", "geometry_index",
+        }
+        assert st[-1]["geometry_index"] == len(rt["geometry"]["coordinates"]) - 1
     assert j["routes"][-1]["vs_fastest"]["exposure_pct"] < 0
     assert set(j["data"]) >= {"date_min", "date_max", "source"}
 
@@ -102,3 +108,57 @@ def test_resolve_period():
     assert [resolve_period("now", datetime(2026, 1, 1, h)) for h in (2, 8, 14, 22)] == [
         "madrugada", "manha", "tarde", "noite",
     ]
+
+
+def test_gzip_and_cors(data_dir, tmp_path, monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example, https://b.example")
+    app = create_app(processed_dir=data_dir, frontend_dir=tmp_path / "nofront")
+    with TestClient(app) as c:
+        r = c.post("/api/routes", json=body(), headers={"Accept-Encoding": "gzip", "Origin": "https://a.example"})
+        assert r.headers["content-encoding"] == "gzip"
+        assert r.headers["access-control-allow-origin"] == "https://a.example"
+        r = c.get("/api/health", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in r.headers
+
+
+def test_no_cors_by_default(client):
+    r = client.get("/api/health", headers={"Origin": "https://a.example"})
+    assert "access-control-allow-origin" not in r.headers
+
+
+def test_background_load(data_dir, tmp_path):
+    app = create_app(processed_dir=data_dir, frontend_dir=tmp_path / "nofront", background_load=True)
+    with TestClient(app) as c:
+        app.state.engine.ready.wait(10)
+        assert c.get("/api/health").json()["graphs"]["walk"]["nodes"] == 36
+        assert c.post("/api/routes", json=body()).status_code == 200
+
+
+def test_frontend_contract_steps_cors_preflight_midblock(data_dir, tmp_path, monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example")
+    app = create_app(processed_dir=data_dir, frontend_dir=tmp_path / "nofront")
+    with TestClient(app) as c:
+        pre = c.options(
+            "/api/routes",
+            headers={
+                "Origin": "https://a.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert pre.status_code == 200
+        assert pre.headers["access-control-allow-origin"] == "https://a.example"
+        assert "POST" in pre.headers["access-control-allow-methods"]
+        assert "content-type" in pre.headers["access-control-allow-headers"].lower()
+        assert c.get("/api/health").status_code == 200
+        # origem no meio da quadra (fora de qualquer nó)
+        o = {"lat": ORIGIN[0] - 0.0004, "lon": ORIGIN[1] + 0.0003}
+        j = c.post("/api/routes", json=body(origin=o)).json()
+        assert [r["id"] for r in j["routes"]][0] == "rapida"
+        for rt in j["routes"]:
+            st, coords = rt["steps"], rt["geometry"]["coordinates"]
+            assert st[0]["maneuver"] == "depart" and st[0]["geometry_index"] == 0
+            assert st[-1]["maneuver"] == "arrive" and st[-1]["distance_m"] == 0
+            assert st[-1]["location"] == coords[-1]
+            for s in st:
+                assert isinstance(s["geometry_index"], int) and s["location"] == coords[s["geometry_index"]]

@@ -3,25 +3,40 @@ name = "sampanav"
 version = "0.1.0"
 description = "Roteamento seguro a pé e de carro na cidade de São Paulo"
 requires-python = ">=3.11"
+# Só o necessário para a API (é o que vai para o container de deploy).
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "httpx",
     "numpy",
-    "pandas",
     "pyarrow",
-    "openpyxl",
     "h3>=4",
-    "osmnx>=2",
     "python-igraph",
     "scipy",
-    "shapely",
 ]
 
 [dependency-groups]
+# Pipeline offline (planilhas da SSP, OSM, agregação de risco).
+pipeline = [
+    "pandas",
+    "openpyxl",
+    "osmnx>=2",
+    "shapely",
+]
 dev = [
     "pytest",
+    "ruff>=0.17.2",
 ]
 
 [tool.uv]
 package = false
+default-groups = ["dev", "pipeline"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["data", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

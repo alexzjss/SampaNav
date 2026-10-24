@@ -11,3 +11,6 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+
+# pacote de dados para deploy (pipeline/package_data.py)
+data/dist/

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sampanav-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ALLOWED_ORIGINS # origens do frontend, separadas por vírgula
+        sync: false

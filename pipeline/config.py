@@ -18,11 +18,18 @@ SSP_URL_TEMPLATE = (
     "SPDadosCriminais_{year}.xlsx"
 )
 
+# Bases auxiliares (ver docs e build_risk.audit_aux_bases: sobreposição medida)
+_SSP_BASE = "https://www.ssp.sp.gov.br/assets/estatistica/transparencia/baseDados/"
+SSP_AUX_URL_TEMPLATES = {
+    "CelularesSubtraidos": _SSP_BASE + "celularesSub/CelularesSubtraidos_{year}.xlsx",
+    "VeiculosSubtraidos": _SSP_BASE + "veiculosSub/VeiculosSubtraidos_{year}.xlsx",
+}
+
 # Colunas lidas das planilhas (demais são descartadas)
 OCC_COLUMNS = [
     "NUM_BO", "ANO_BO", "NOME_DELEGACIA", "DATA_OCORRENCIA_BO", "HORA_OCORRENCIA_BO",
     "DESC_PERIODO", "DESCR_TIPOLOCAL", "DESCR_SUBTIPOLOCAL", "LATITUDE", "LONGITUDE",
-    "RUBRICA", "DESCR_CONDUTA", "NATUREZA_APURADA",
+    "RUBRICA", "DESCR_CONDUTA", "NATUREZA_APURADA", "BAIRRO",
 ]
 
 # ---------------------------------------------------------------------------
@@ -91,3 +98,29 @@ CONDUTA_RESIDENCIA = [
 
 # Percentil que define risk = 1.0 na normalização logarítmica (ver build_risk.normalize_risk).
 RISK_TOP_PERCENTILE = 99.9
+
+# ---------------------------------------------------------------------------
+# Modelo de risco v2 (docs/ARQUITETURA.md seção 8)
+# ---------------------------------------------------------------------------
+# β: mistura mix = rate_norm^β · score_norm^(1-β). 0 = v1 (contagem bruta);
+# 1 = só taxa por movimento. 0.5 tira o Centro da saturação sem apagá-lo
+# (taxa pura superestima bairros periféricos com footfall ~0).
+RISK_BETA = 0.5
+# γ: multiplicador de escuridão em noite/madrugada: score *= 1 + γ·(1 - light).
+RISK_GAMMA = 0.3
+LIGHT_PERIODS = ["noite", "madrugada"]
+
+OSM_PLACE = "São Paulo, São Paulo, Brazil"
+LIGHTING_RAW_PATH = DATA_RAW / "iluminacao_pontos.parquet"
+
+# Proxy de movimento (pipeline/footfall.py): peso por km de via a pé, por tipo
+# `highway` do OSM. Calçadões e corredores de metrô/ônibus concentram pedestres;
+# avenidas principais têm comércio e pontos de ônibus; ruas residenciais, pouco.
+STREET_FOOTFALL_WEIGHTS = {
+    "pedestrian": 8.0, "corridor": 6.0, "busway": 4.0, "bus_stop": 4.0, "living_street": 4.0,
+    "steps": 3.0, "primary": 3.0, "secondary": 2.5, "tertiary": 1.5, "footway": 1.5,
+    "primary_link": 1.0, "secondary_link": 1.0, "tertiary_link": 1.0, "trunk": 1.0,
+    "residential": 0.5, "unclassified": 0.5, "trunk_link": 0.3, "service": 0.3,
+    "path": 0.1, "track": 0.1,
+}
+STREET_FOOTFALL_DEFAULT = 0.0  # tipos raros/estranhos (ladder, emergency_bay...) não contam

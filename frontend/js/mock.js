@@ -11,6 +11,12 @@ const PLACES = [
   { label: 'Largo da Batata, Pinheiros, São Paulo', lat: -23.5670, lon: -46.6914 },
   { label: 'Vila Madalena, São Paulo', lat: -23.5546, lon: -46.6911 },
 ];
+const T0 = Date.now();
+const COLD_S = Number(new URLSearchParams(location.search).get('cold')) || 0; // ?cold=N simula N s de cold start
+export async function health() {
+  await delay(60);
+  return Date.now() - T0 >= COLD_S * 1000;
+}
 export async function meta() {
   await delay(100);
   return { generated_at: '2026-10-20T12:00:00', date_min: '2024-09-01', date_max: '2026-08-31', n_occurrences: 123456,
@@ -36,6 +42,31 @@ function dist(c) {
     d += Math.hypot(dx, dy);
   }
   return d;
+}
+const STREETS = ['Rua Direita', 'Av. Paulista', 'Rua Augusta', 'Rua da Consolação', 'Av. Brigadeiro Luís Antônio', 'Rua Haddock Lobo', 'Alameda Santos'];
+const TURNS = ['right', 'left', 'slight-right', 'left', 'sharp-right', 'slight-left'];
+const VERB = {
+  right: 'Vire à direita', left: 'Vire à esquerda', 'slight-right': 'Vire levemente à direita',
+  'slight-left': 'Vire levemente à esquerda', 'sharp-right': 'Faça uma curva fechada à direita',
+  'sharp-left': 'Faça uma curva fechada à esquerda', uturn: 'Faça o retorno',
+};
+const fmtM = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`);
+/** Passos no formato da seção 9 do contrato (maneuver, instruction, street, distance_m, duration_s, location, geometry_index). */
+function makeSteps(coords, speed, seed) {
+  const n = coords.length - 1;
+  const idx = [0, 4, 9, 14, 19, n].filter((v, i, a) => a.indexOf(v) === i);
+  return idx.map((gi, k) => {
+    const last = k === idx.length - 1;
+    const street = STREETS[(k + seed) % STREETS.length];
+    const maneuver = k === 0 ? 'depart' : last ? 'arrive' : TURNS[(k + seed) % TURNS.length];
+    const d = last ? 0 : dist(coords.slice(gi, idx[k + 1] + 1));
+    const len = fmtM(d);
+    const instruction = last ? 'Chegada ao destino'
+      : k === 0 ? `Siga pela ${street} por ${len}`
+      : `${VERB[maneuver]} na ${street}`;
+    return { maneuver, instruction, street: last ? '' : street, distance_m: +d.toFixed(1), duration_s: Math.round(d / speed),
+      location: coords[gi], geometry_index: gi };
+  });
 }
 export async function routes({ origin, destination, mode, period }) {
   await delay(500);
@@ -66,7 +97,8 @@ export async function routes({ origin, destination, mode, period }) {
     return { id, label, alpha, distance_m: +d.toFixed(1), duration_s: Math.round(dur), exposure: +exposure.toFixed(2),
       avg_risk: avg, risk_level: level,
       vs_fastest: { duration_pct: +(((dur / base.dur) - 1) * 100).toFixed(1), exposure_pct: +(((exposure / base.exposure) - 1) * 100).toFixed(1) },
-      categories: cats, geometry: { type: 'LineString', coordinates: coords }, segments: segs };
+      categories: cats, geometry: { type: 'LineString', coordinates: coords }, segments: segs,
+      steps: new URLSearchParams(location.search).has('nosteps') ? undefined : makeSteps(coords, speed, i) };
   });
   return { mode, period: period === 'now' ? 'noite' : period, routes: out,
     data: { date_min: '2024-09-01', date_max: '2026-08-31', source: 'SSP-SP' } };

@@ -8,17 +8,21 @@ import sys
 
 import httpx
 
-from pipeline.config import DATA_RAW, SSP_URL_TEMPLATE
+from pipeline.config import DATA_RAW, SSP_AUX_URL_TEMPLATES, SSP_URL_TEMPLATE
 
 
-def download_year(year: int, force: bool = False) -> None:
-    url = SSP_URL_TEMPLATE.format(year=year)
-    dest = DATA_RAW / f"SPDadosCriminais_{year}.xlsx"
+def download_year(year: int, force: bool = False, kind: str = "SPDadosCriminais", skip_missing: bool = False) -> None:
+    template = SSP_URL_TEMPLATE if kind == "SPDadosCriminais" else SSP_AUX_URL_TEMPLATES[kind]
+    url = template.format(year=year)
+    dest = DATA_RAW / f"{kind}_{year}.xlsx"
     DATA_RAW.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".xlsx.part")
 
-    with httpx.Client(follow_redirects=True, timeout=60) as client:
+    with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(60, read=600)) as client:
         with client.stream("GET", url) as r:
+            if r.status_code == 404 and skip_missing:
+                print(f"{year}: {kind} ainda não publicado (HTTP 404), pulando")
+                return
             if r.status_code != 200:
                 raise SystemExit(f"{year}: HTTP {r.status_code} em {url}")
             total = int(r.headers.get("content-length", 0))
@@ -44,9 +48,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--years", nargs="+", type=int, default=[2025, 2026])
     ap.add_argument("--force", action="store_true", help="rebaixa mesmo se já existir")
+    ap.add_argument("--aux", action="store_true",
+                    help="baixa também CelularesSubtraidos e VeiculosSubtraidos")
+    ap.add_argument("--skip-missing", action="store_true",
+                    help="pula anos ainda não publicados (404) em vez de falhar, p.ex. em janeiro")
     args = ap.parse_args()
     for y in args.years:
-        download_year(y, args.force)
+        download_year(y, args.force, skip_missing=args.skip_missing)
+        if args.aux:
+            for kind in SSP_AUX_URL_TEMPLATES:
+                download_year(y, args.force, kind, skip_missing=args.skip_missing)
 
 
 if __name__ == "__main__":

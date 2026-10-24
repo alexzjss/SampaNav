@@ -1,4 +1,4 @@
-import { riskColor } from './format.js';
+import { riskColor, resetRiskPalette } from './format.js';
 
 const CENTER = [-46.63, -23.55];
 const BOUNDS = [[-46.9, -24.05], [-46.3, -23.3]];
@@ -6,6 +6,8 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 export const HEAT_MIN_ZOOM = 12;
 
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+const heatColor = () => ['interpolate', ['linear'], ['get', 'risk'],
+  0.05, cssVar('--risk-0'), 0.35, cssVar('--risk-1'), 0.65, cssVar('--risk-2'), 1, cssVar('--risk-3')];
 
 export function createMap(handlers) {
   const map = new maplibregl.Map({
@@ -16,6 +18,7 @@ export function createMap(handlers) {
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
   const markers = { origin: null, dest: null };
+  let userMarker = null, stepMarker = null;
   let routes = [];
   let selectedId = null;
   let ready = false;
@@ -26,8 +29,7 @@ export function createMap(handlers) {
     map.addSource('heat', { type: 'geojson', data: EMPTY });
     map.addLayer({ id: 'heat-fill', type: 'fill', source: 'heat', paint: {
       'fill-opacity': 0.38,
-      'fill-color': ['interpolate', ['linear'], ['get', 'risk'],
-        0.05, '#2e9e5b', 0.35, '#f2c744', 0.65, '#ee8133', 1, '#c0262d'],
+      'fill-color': heatColor(),
     } });
     map.addSource('routes', { type: 'geojson', data: EMPTY });
     map.addSource('selected', { type: 'geojson', data: EMPTY });
@@ -40,12 +42,19 @@ export function createMap(handlers) {
       paint: { 'line-color': ['get', 'color'], 'line-width': 6.5 } });
     ready = true;
     whenReady.splice(0).forEach((f) => f());
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      map.setPaintProperty('routes-muted', 'line-color', cssVar('--route-muted'));
-      map.setPaintProperty('selected-casing', 'line-color', cssVar('--route-casing'));
-    });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshTheme);
     handlers.onReady?.();
   });
+
+  /** Reaplica cores que vêm de variáveis CSS (tema claro/escuro). */
+  function refreshTheme() {
+    if (!ready) return;
+    resetRiskPalette();
+    map.setPaintProperty('routes-muted', 'line-color', cssVar('--route-muted'));
+    map.setPaintProperty('selected-casing', 'line-color', cssVar('--route-casing'));
+    map.setPaintProperty('heat-fill', 'fill-color', heatColor());
+    draw();
+  }
 
   let routeClicked = false;
   map.on('click', 'routes-muted', (e) => {
@@ -60,6 +69,7 @@ export function createMap(handlers) {
     handlers.onMapClick?.({ lat: e.lngLat.lat, lon: e.lngLat.lng });
   });
   map.on('moveend', () => handlers.onMoveEnd?.());
+  map.on('dragstart', () => handlers.onUserPan?.()); // só gestos do usuário
 
   function draw() {
     const muted = routes.filter((r) => r.id !== selectedId).map((r) => ({
@@ -116,6 +126,38 @@ export function createMap(handlers) {
     clearHeat() { run(() => map.getSource('heat').setData(EMPTY)); },
     bbox() { const b = map.getBounds(); return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((x) => +x.toFixed(5)); },
     zoom: () => map.getZoom(),
+    refreshTheme,
+    /** Ponto do usuário durante a navegação (heading em graus ou null). */
+    setUser(p, heading) {
+      if (!userMarker) {
+        const el = document.createElement('div');
+        el.className = 'user-dot';
+        el.innerHTML = '<span class="user-heading"></span><span class="user-core"></span>';
+        userMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat([p.lon, p.lat]).addTo(map);
+      }
+      userMarker.setLngLat([p.lon, p.lat]);
+      const el = userMarker.getElement();
+      el.classList.toggle('has-heading', heading != null);
+      if (heading != null) userMarker.setRotation(heading);
+    },
+    removeUser() { userMarker?.remove(); userMarker = null; },
+    follow(p) { map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 16.5), duration: 700, essential: true }); },
+    /** Voa até o local de um passo e marca o ponto. */
+    showStep(loc) {
+      stepMarker?.remove();
+      const el = document.createElement('div');
+      el.className = 'step-dot';
+      stepMarker = new maplibregl.Marker({ element: el }).setLngLat(loc).addTo(map);
+      const sheet = innerWidth < 768 && !document.body.classList.contains('navigating');
+      map.flyTo({ center: loc, zoom: Math.max(map.getZoom(), 17), essential: true,
+        padding: { top: 0, left: 0, right: 0, bottom: sheet ? Math.round(innerHeight * 0.55) : 0 } });
+    },
+    clearStep() { stepMarker?.remove(); stepMarker = null; },
+    fitBounds(coords) {
+      const b = new maplibregl.LngLatBounds();
+      coords.forEach((c) => b.extend(c));
+      if (!b.isEmpty()) map.fitBounds(b, { padding: 80, maxZoom: 17, duration: 600 });
+    },
     flyTo(p) { map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 14) }); },
   };
 }

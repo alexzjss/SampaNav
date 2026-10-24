@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,6 +50,19 @@ class Segment(BaseModel):
     risk: float
 
 
+class Step(BaseModel):
+    maneuver: Literal[
+        "depart", "continue", "slight-left", "left", "sharp-left",
+        "slight-right", "right", "sharp-right", "uturn", "arrive",
+    ]
+    instruction: str
+    street: str = ""
+    distance_m: float
+    duration_s: int
+    location: list[float]
+    geometry_index: int
+
+
 class RouteOut(BaseModel):
     id: str
     label: str
@@ -60,6 +76,7 @@ class RouteOut(BaseModel):
     categories: dict[str, int]
     geometry: LineString
     segments: list[Segment]
+    steps: list[Step] = []
 
 
 class DataInfo(BaseModel):
@@ -106,16 +123,38 @@ def resolve_period(period: str, now: datetime | None = None) -> str:
     return "noite"
 
 
-def create_app(processed_dir: Path | None = None, frontend_dir: Path | None = None) -> FastAPI:
+def allowed_origins() -> list[str]:
+    return [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+
+def create_app(
+    processed_dir: Path | None = None,
+    frontend_dir: Path | None = None,
+    background_load: bool | None = None,
+) -> FastAPI:
+    """background_load: carrega os grafos numa thread depois de abrir a porta (deploy com pouca CPU).
+    Padrão: variável SAMPANAV_BACKGROUND_LOAD=1; nos testes, carga síncrona."""
     processed = Path(processed_dir or os.environ.get("SAMPANAV_DATA_DIR") or DATA_PROCESSED)
+    if background_load is None:
+        background_load = os.environ.get("SAMPANAV_BACKGROUND_LOAD", "") == "1"
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.engine = Engine(processed)
+        if background_load:
+            app.state.engine = Engine(processed, load=False)
+            threading.Thread(target=app.state.engine.load, name="engine-load", daemon=True).start()
+        else:
+            app.state.engine = Engine(processed)
         yield
         await geo.close()
 
     app = FastAPI(title="SampaNav", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    origins = allowed_origins()
+    if origins:
+        app.add_middleware(
+            CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"]
+        )
 
     def engine() -> Engine:
         return app.state.engine
@@ -127,7 +166,8 @@ def create_app(processed_dir: Path | None = None, frontend_dir: Path | None = No
             m: {"nodes": g.n_nodes, "edges": g.n_edges} if (g := e.graphs.get(m)) else {"nodes": 0, "edges": 0}
             for m in ("walk", "drive")
         }
-        out = {"status": "ok" if not e.missing else "degraded", "graphs": graphs}
+        status = "loading" if not e.ready.is_set() else ("ok" if not e.missing else "degraded")
+        out = {"status": status, "graphs": graphs}
         if e.missing:
             out["missing"] = e.missing
             out["detail"] = (
@@ -148,18 +188,20 @@ def create_app(processed_dir: Path | None = None, frontend_dir: Path | None = No
         try:
             return await geo.geocode(q)
         except geo.GeocodeError as e:
-            raise HTTPException(502, str(e))
+            raise HTTPException(502, str(e)) from e
 
     @app.post("/api/routes", response_model=RouteResponse)
     def routes(req: RouteRequest):
         e = engine()
+        if not e.ready.is_set():
+            raise HTTPException(503, "Servidor iniciando; tente novamente em instantes.")
         period = resolve_period(req.period)
         try:
             routes = e.compute(
                 req.mode, (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon), period
             )
         except RoutingError as ex:
-            raise HTTPException(400, str(ex))
+            raise HTTPException(400, str(ex)) from ex
         return {
             "mode": req.mode,
             "period": period,
@@ -174,7 +216,7 @@ def create_app(processed_dir: Path | None = None, frontend_dir: Path | None = No
             if len(b) != 4:
                 raise ValueError
         except ValueError:
-            raise HTTPException(400, "bbox deve ser minLon,minLat,maxLon,maxLat")
+            raise HTTPException(400, "bbox deve ser minLon,minLat,maxLon,maxLat") from None
         p = resolve_period(period)
         if p not in PERIODS:
             raise HTTPException(400, "período inválido")

@@ -110,6 +110,26 @@ def decay_weight(age_days, half_life_days: float = C.HALF_LIFE_DAYS):
 # --------------------------------------------------------------------------
 # Extração
 # --------------------------------------------------------------------------
+# Colunas que nem todo ano traz; DESCR_TIPOLOCAL falta em 2024 e é inferida do subtipo.
+OPTIONAL_COLUMNS = {"DESCR_TIPOLOCAL"}
+
+
+def fill_tipolocal(df: pd.DataFrame) -> pd.DataFrame:
+    """Preenche DESCR_TIPOLOCAL ausente com o tipo mais comum do mesmo subtipo nos outros anos.
+
+    246 dos 265 subtipos pertencem a um único tipo em >= 95% dos registros.
+    """
+    known = df.dropna(subset=["DESCR_TIPOLOCAL", "DESCR_SUBTIPOLOCAL"])
+    if known.empty:
+        return df
+    modal = known.groupby("DESCR_SUBTIPOLOCAL")["DESCR_TIPOLOCAL"].agg(lambda s: s.value_counts().index[0])
+    miss = df["DESCR_TIPOLOCAL"].isna()
+    df.loc[miss, "DESCR_TIPOLOCAL"] = df.loc[miss, "DESCR_SUBTIPOLOCAL"].map(modal)
+    print(f"DESCR_TIPOLOCAL inferido do subtipo em {int(miss.sum())} linhas "
+          f"({int(df.loc[miss, 'DESCR_TIPOLOCAL'].isna().sum())} sem correspondência)")
+    return df
+
+
 def extract_city(xlsx_path) -> list[tuple]:
     """Lê as planilhas de dados (streaming) e devolve linhas de S.PAULO."""
     import openpyxl
@@ -125,14 +145,18 @@ def extract_city(xlsx_path) -> list[tuple]:
             header = next(rows)
             # cabeçalhos variam entre anos (ex.: CIRCUNCRIÇÃO / CD_IBGE em 2025)
             idx = {norm_text(h): i for i, h in enumerate(header) if h}
-            cols = [idx[norm_text(c)] for c in C.OCC_COLUMNS]
+            # coluna ausente no ano (ex.: DESCR_TIPOLOCAL em 2024) vira None e é inferida depois
+            cols = [idx.get(norm_text(c)) for c in C.OCC_COLUMNS]
+            missing = [c for c, i in zip(C.OCC_COLUMNS, cols, strict=True) if i is None]
+            if missing and set(missing) - OPTIONAL_COLUMNS:
+                raise KeyError(f"{xlsx_path.name}:{name}: colunas ausentes {missing}")
             i_city = next(i for k, i in idx.items() if k.startswith("nome_municipio_circun"))
             i_ibge = idx.get("cod ibge", idx.get("cd_ibge"))
             n = 0
             for r in rows:
                 n += 1
                 if r[i_city] == "S.PAULO" or r[i_ibge] == 3550308:
-                    out.append(tuple(r[i] for i in cols))
+                    out.append(tuple(None if i is None else r[i] for i in cols))
             print(f"  {xlsx_path.name}:{name}: {n} linhas, acumulado SP {len(out)}")
     finally:
         wb.close()
@@ -154,6 +178,7 @@ def load_occurrences(force: bool = False) -> tuple[pd.DataFrame, list[str]]:
         df = pd.DataFrame(extract_city(p), columns=C.OCC_COLUMNS)
         frames.append(df)
     df = pd.concat(frames, ignore_index=True)
+    df = fill_tipolocal(df)
     # tipos heterogêneos (hora como time/str) -> normaliza antes do parquet
     df["HORA"] = df["HORA_OCORRENCIA_BO"].map(parse_hour).astype("Int8")
     df = df.drop(columns=["HORA_OCORRENCIA_BO"])
@@ -161,7 +186,7 @@ def load_occurrences(force: bool = False) -> tuple[pd.DataFrame, list[str]]:
     for c in ("LATITUDE", "LONGITUDE"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
     for c in ("NUM_BO", "NOME_DELEGACIA", "DESC_PERIODO", "DESCR_TIPOLOCAL",
-              "DESCR_SUBTIPOLOCAL", "RUBRICA", "DESCR_CONDUTA", "NATUREZA_APURADA"):
+              "DESCR_SUBTIPOLOCAL", "RUBRICA", "DESCR_CONDUTA", "NATUREZA_APURADA", "BAIRRO"):
         df[c] = df[c].astype("string")
     df["ANO_BO"] = pd.to_numeric(df["ANO_BO"], errors="coerce").astype("Int32")
     C.DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
@@ -207,7 +232,7 @@ def prepare(df: pd.DataFrame, stats: dict | None = None) -> pd.DataFrame:
     hours = df["HORA"].to_numpy(dtype=float, na_value=np.nan)
     per = [period_from_hour(None if np.isnan(h) else int(h)) for h in hours]
     desc = df["DESC_PERIODO"].to_numpy()
-    df["period"] = [p or period_from_desc(d) for p, d in zip(per, desc)]
+    df["period"] = [p or period_from_desc(d) for p, d in zip(per, desc, strict=True)]
     return df.reset_index(drop=True)
 
 
@@ -227,11 +252,40 @@ def normalize_risk(score: np.ndarray) -> np.ndarray:
     return np.clip(np.log1p(score / med) / np.log1p(top / med), 0.0, 1.0)
 
 
-def aggregate(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrega em H3 por (mode, period) com suavização k=1 e normalização log."""
+def light_multiplier(light, gamma: float = C.RISK_GAMMA):
+    """1 + γ·(1 - light); light NaN (sem dado) -> 1 (sem efeito)."""
+    light = np.asarray(light, dtype=float)
+    return np.where(np.isnan(light), 1.0, 1.0 + gamma * (1.0 - np.clip(light, 0.0, 1.0)))
+
+
+def mix_risk(score, footfall, beta: float = C.RISK_BETA, f0: float | None = None):
+    """Risco v2: mix = rate_norm^β · score_norm^(1-β), rate = score / (footfall + F0).
+
+    F0 = mediana de footfall das células com score > 0 (se não informado). β=0 reproduz
+    o v1 (normalize_risk(score)). Retorna (risk, rate).
+    """
+    score = np.asarray(score, dtype=float)
+    ff = np.nan_to_num(np.asarray(footfall, dtype=float), nan=0.0)
+    if f0 is None:
+        f0 = float(np.median(ff[score > 0])) if (score > 0).any() else 0.0
+    rate = score / (ff + max(f0, 1e-9))
+    sn = normalize_risk(score)
+    if beta <= 0:
+        return sn, rate
+    rn = normalize_risk(rate)
+    return np.clip(rn ** beta * sn ** (1.0 - beta), 0.0, 1.0), rate
+
+
+def aggregate(df: pd.DataFrame, footfall: pd.Series | None = None, light: pd.Series | None = None,
+              beta: float = C.RISK_BETA, gamma: float = C.RISK_GAMMA) -> pd.DataFrame:
+    """Agrega em H3 por (mode, period): suavização k=1, iluminação, taxa/mix e normalização log.
+
+    `footfall`/`light`: Series indexadas por h3 (opcionais). Sem `light`, a coluna fica NaN.
+    Em células sem ponto de luz (light ausente com base carregada) light = 0.
+    """
     import h3
 
-    cells = [h3.latlng_to_cell(a, o, C.H3_RES) for a, o in zip(df["LATITUDE"], df["LONGITUDE"])]
+    cells = [h3.latlng_to_cell(a, o, C.H3_RES) for a, o in zip(df["LATITUDE"], df["LONGITUDE"], strict=True)]
     df = df.assign(h3=cells)
     out = []
     for mode in C.MODES:
@@ -255,34 +309,118 @@ def aggregate(df: pd.DataFrame) -> pd.DataFrame:
             res = pd.DataFrame({"h3": list(score), "score": list(score.values())})
             res["n"] = res["h3"].map(g["n"]).fillna(0).astype(int)
             res["top_categories"] = res["h3"].map(top).fillna("{}")
-            res["risk"] = normalize_risk(res["score"].to_numpy())
+            if light is not None:
+                res["light"] = res["h3"].map(light).fillna(0.0)
+                if period in C.LIGHT_PERIODS:
+                    res["score"] = res["score"] * light_multiplier(res["light"], gamma)
+            else:
+                res["light"] = np.nan
+            if footfall is not None:
+                res["footfall"] = res["h3"].map(footfall).fillna(0.0)
+                res["risk"], res["rate"] = mix_risk(res["score"].to_numpy(), res["footfall"].to_numpy(), beta)
+            else:
+                res["footfall"], res["rate"] = np.nan, np.nan
+                res["risk"] = normalize_risk(res["score"].to_numpy())
             res["mode"], res["period"] = mode, period
             out.append(res)
     r = pd.concat(out, ignore_index=True)
-    return r[["h3", "mode", "period", "score", "risk", "n", "top_categories"]]
+    return r[["h3", "mode", "period", "score", "risk", "n", "top_categories", "footfall", "light", "rate"]]
+
+
+AUX_COLS = ["NUM_BO", "ANO_BO", "NOME_DELEGACIA", "NOME_MUNICIPIO", "RUBRICA", "LATITUDE", "LONGITUDE"]
+
+
+def read_aux(path) -> pd.DataFrame:
+    """Linhas de S.PAULO de uma base auxiliar (última planilha de dados), colunas AUX_COLS."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb[wb.sheetnames[-1]]
+        rows = ws.iter_rows(values_only=True)
+        header = list(next(rows))
+        idx = [header.index(c) for c in AUX_COLS]
+        df = pd.DataFrame([tuple(r[i] for i in idx) for r in rows], columns=AUX_COLS)
+    finally:
+        wb.close()
+    return df[df["NOME_MUNICIPIO"] == "S.PAULO"].reset_index(drop=True)
+
+
+def audit_aux_bases(main_df: pd.DataFrame) -> dict:
+    """Mede a sobreposição das bases auxiliares da SSP com SPDadosCriminais.
+
+    Chave do BO: (NUM_BO, ANO_BO, NOME_DELEGACIA). Reporta, por arquivo, quantos BOs
+    (e linhas com coordenada válida) não existem em SPDadosCriminais.
+    """
+    main_df = main_df.dropna(subset=['NUM_BO', 'ANO_BO'])
+    keys = set(zip(main_df["NUM_BO"].astype(str), main_df["ANO_BO"].astype(int),
+                   main_df["NOME_DELEGACIA"].astype(str), strict=True))
+    min_lon, min_lat, max_lon, max_lat = C.SP_BBOX
+    report = {}
+    for p in sorted(C.DATA_RAW.glob("*Subtraidos_*.xlsx")):
+        a = read_aux(p)
+        a["geo"] = pd.to_numeric(a["LATITUDE"], errors="coerce").between(min_lat, max_lat) & \
+            pd.to_numeric(a["LONGITUDE"], errors="coerce").between(min_lon, max_lon)
+        k = list(zip(a["NUM_BO"].astype(str), pd.to_numeric(a["ANO_BO"]).astype(int),
+                     a["NOME_DELEGACIA"].astype(str), strict=True))
+        a["in_main"] = [x in keys for x in k]
+        bos = pd.Series(k).drop_duplicates()
+        report[p.name] = {
+            "rows_sp": int(len(a)), "bos_sp": int(len(bos)),
+            "bos_in_main": int(sum(x in keys for x in bos)),
+            "rows_not_in_main": int((~a["in_main"]).sum()),
+            "rows_not_in_main_with_geo": int((~a["in_main"] & a["geo"]).sum()),
+            # só o que o modelo usaria (roubo/furto com coordenada) e não está no principal
+            "rows_not_in_main_roubo_furto_geo": int(
+                (~a["in_main"] & a["geo"] & a["RUBRICA"].map(norm_text).str.contains(
+                    "roubo \\(art|furto \\(art")).sum()),
+        }
+        print(p.name, report[p.name])
+    return report
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--force", action="store_true", help="reextrai as planilhas")
+    ap.add_argument("--audit-aux", action="store_true",
+                    help="mede a sobreposição das bases Celulares/VeiculosSubtraidos e sai")
+    ap.add_argument("--beta", type=float, default=C.RISK_BETA)
+    ap.add_argument("--gamma", type=float, default=C.RISK_GAMMA)
+    ap.add_argument("--no-footfall", action="store_true", help="v1: sem movimento (β efetivo 0)")
+    ap.add_argument("--no-light", action="store_true")
     args = ap.parse_args()
 
     raw, sources = load_occurrences(args.force)
+    if args.audit_aux:
+        audit_aux_bases(raw)
+        return
     stats: dict = {}
     df = prepare(raw, stats)
-    risk = aggregate(df)
+    from pipeline.footfall import load_footfall
+    from pipeline.lighting import load_light
+
+    footfall = None if args.no_footfall else load_footfall()
+    light = None if args.no_light else load_light()
+    risk = aggregate(df, footfall, light, args.beta, args.gamma)
     C.DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
     risk.to_parquet(RISK_PATH, index=False)
 
     cat_counts = df["category"].value_counts().to_dict()
     meta = {
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "source_files": sources,
         "date_min": stats["date_min"],
         "date_max": stats["date_max"],
         "n_occurrences": int(len(df)),
         "categories": {k: int(v) for k, v in cat_counts.items()},
         "weights": C.WEIGHTS,
+        "model": "v2" if footfall is not None else "v1",
+        "beta": args.beta if footfall is not None else 0.0,
+        "gamma": args.gamma if light is not None else 0.0,
+        "footfall_source": "malha viária a pé do OSM ponderada por tipo de via (pipeline/footfall.py), H3 res 9, k=1" if footfall is not None else None,
+        "light_source": ("GeoSampa WFS geoportal:iluminacao_publica (SMUL/ILUME), densidade H3 res 9 k=1"
+                         if light is not None else None),
+        "aux_bases": "Celulares/VeiculosSubtraidos não integradas: sem ocorrências novas (ver audit_aux_bases)",
     }
     META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 

@@ -223,3 +223,106 @@ uv run python -m pipeline.build_risk
 uv run python -m pipeline.build_graph
 uv run uvicorn backend.app.main:app --reload
 ```
+
+---
+
+# Fase 2 (planejada em 23/10/2026)
+
+Contratos novos. Tudo que está acima continua valendo; os campos abaixo são
+**aditivos** (nenhum campo existente muda de significado).
+
+## 8. Modelo de risco v2 (pipeline)
+
+Problema: contagem bruta mede volume de ocorrências, e áreas muito movimentadas
+(Centro, Paulista) concentram registros também por concentrarem pessoas.
+
+- **Movimento (proxy de fluxo):** soma, por célula H3, de `peso(tipo de via) ×
+  km` das arestas do grafo a pé (calçadões, corredores de metrô/ônibus e
+  avenidas principais pesam mais que ruas residenciais; pesos em
+  `config.STREET_FOOTFALL_WEIGHTS`); suavização k=1. Coluna `footfall` (≥ 0).
+  Não depende de rede: a primeira versão usava POIs via Overpass, que se
+  mostrou instável demais (502/504/timeouts) para rodar todo mês.
+- **Taxa:** `rate = score / (footfall + F0)`, com `F0` = mediana de `footfall`
+  das células com ocorrências (encolhe a taxa onde há pouco movimento e evita
+  divisão por ~0). O risco de roteamento passa a vir de uma mistura
+  `mix = rate_norm^β · score_norm^(1−β)` (β em `config.py`, padrão 0.5), depois
+  a mesma normalização log da seção 2. β=0 reproduz o modelo v1.
+- **Iluminação:** se houver base pública utilizável (GeoSampa/ILUME: pontos de
+  iluminação), coluna `light` = densidade de pontos por célula, normalizada
+  0–1. Nos períodos `noite` e `madrugada`, multiplicador
+  `1 + γ·(1 − light)` sobre o score (γ em `config.py`, padrão 0.3). Sem base
+  disponível, `light` = NaN e nenhum efeito.
+- **Bases auxiliares da SSP** (`CelularesSubtraidos`, `VeiculosSubtraidos`):
+  avaliadas e **não integradas**. 87–89% dos BOs já estão em
+  `SPDadosCriminais`; o restante com coordenada e natureza de roubo/furto soma
+  ~3,3 mil registros em 2025–2026 (< 1% da base). `build_risk --audit-aux`
+  refaz a medição.
+- Saída: `risk_hex.parquet` ganha colunas opcionais `footfall`, `light`,
+  `rate`. `risk` continua sendo o campo usado no roteamento.
+- `pipeline/evaluate.py`: relatório de diagnóstico (distribuição de `risk`,
+  células top-20 v1 vs v2 com bairro aproximado, correlação com footfall).
+
+## 9. Navegação passo a passo (API)
+
+O grafo passa a guardar, por aresta, `name` (nome da via no OSM; vazio se não
+houver) e `highway` (tipo). Cada rota em `POST /api/routes` ganha:
+
+```json
+"steps": [
+  {
+    "maneuver": "depart",
+    "instruction": "Siga pela Rua Direita por 120 m",
+    "street": "Rua Direita",
+    "distance_m": 120.4,
+    "duration_s": 93,
+    "location": [-46.6339, -23.5503],
+    "geometry_index": 0
+  }
+]
+```
+
+- `maneuver` ∈ `depart`, `continue`, `slight-left`, `left`, `sharp-left`,
+  `slight-right`, `right`, `sharp-right`, `uturn`, `arrive`.
+  Classificação pelo ângulo entre arestas: < 20° continue, < 60° slight,
+  < 135° normal, < 170° sharp, senão uturn.
+- Arestas consecutivas com o mesmo nome (ou ambas sem nome e ângulo < 20°)
+  são fundidas num único passo. Via sem nome: "via sem nome"/"caminho".
+- `location`: ponto onde a manobra acontece. `geometry_index`: índice em
+  `geometry.coordinates` desse ponto (a navegação usa para medir progresso).
+- Instruções em português: "Vire à direita na Av. Paulista",
+  "Continue pela Rua Augusta por 300 m", "Chegada ao destino".
+
+## 10. Deploy (grátis)
+
+- **Frontend:** Vercel (static, `frontend/` como output, `vercel.json`).
+  A URL da API vem de `frontend/config.js` (`window.SAMPANAV_CONFIG = {apiBase}`),
+  vazio = mesma origem (dev local). Sem proxy da Vercel para a API (timeout
+  de 30 s não comporta o cold start).
+- **API:** container Docker no Render (plano free: 512 MB RAM, 0.1 CPU, dorme
+  após 15 min). Metas do backend: **RSS < 450 MB** com os dois grafos e
+  **startup < 15 s** em CPU limitada. Respostas com gzip. CORS por variável
+  `ALLOWED_ORIGINS`. `render.yaml` no repo.
+- **Dados no deploy:** `data/processed/` não vai para o git. O script
+  `pipeline/package_data.py` gera `sampanav-data.tar.gz` (grafos + risco +
+  meta), publicado como asset de uma GitHub Release (`data-YYYY-MM`). O
+  container baixa o asset no build (`DATA_URL`).
+- **Cold start no frontend:** `GET /api/health` com retry; enquanto falha,
+  mostra "Acordando o servidor (até 2 min)…".
+- **Atualização mensal:** GitHub Action agendada roda o pipeline (SSP + risco +
+  `build_graph --risk-only` reaproveitando a Release anterior) e publica nova
+  Release; dispara o deploy hook do Render.
+- **CI:** GitHub Actions com `ruff check` + `pytest` em push/PR.
+
+## 11. Frontend fase 2
+
+- **Compartilhar por link:** estado na URL (`?o=lat,lon&d=lat,lon&m=walk&p=noite&r=equilibrada`
+  + rótulos opcionais `on=`/`dn=`). Abrir o link recalcula as rotas. Botão
+  "Compartilhar" usa `navigator.share` com fallback para copiar.
+- **Histórico:** últimas 10 buscas em `localStorage` (try/catch), lista
+  "Recentes" quando os campos estão vazios, botão "Limpar histórico". Nada
+  sai do navegador.
+- **Navegação:** lista de passos no cartão da rota selecionada; modo
+  "Iniciar navegação" com `watchPosition`: segue o usuário, destaca o passo
+  atual, mostra distância até a próxima manobra, detecta saída da rota
+  (> 40 m por 3 leituras) e oferece recalcular. Mantém tela ligada com Wake
+  Lock quando disponível.

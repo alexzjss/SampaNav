@@ -23,6 +23,12 @@
         <p class="tagline">Rotas em São Paulo que equilibram tempo e exposição a ocorrências registradas.</p>
       </header>
 
+      <div class="server-banner" id="server-banner" role="status" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="server-banner-text">Acordando o servidor (pode levar até 2 min)…</span>
+        <button type="button" class="link-btn" id="server-retry" hidden>Tentar de novo</button>
+      </div>
+
       <div class="panel-body" id="panel-body">
         <form id="route-form" autocomplete="off" novalidate>
           <div class="points">
@@ -47,6 +53,13 @@
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 4v16M8 20l-4-4M8 20l4-4M16 20V4M16 4l-4 4M16 4l4 4"/></svg>
             </button>
           </div>
+          <section class="recents" id="recents" aria-labelledby="recents-title" hidden>
+            <div class="recents-head">
+              <h2 id="recents-title">Recentes</h2>
+              <button type="button" class="link-btn" id="clear-history">Limpar histórico</button>
+            </div>
+            <ul id="recents-list" class="recents-list"></ul>
+          </section>
           <p class="hint" id="map-hint">Dica: clique no mapa para definir a origem e depois o destino. Arraste os marcadores para ajustar.</p>
 
           <div class="controls">
@@ -80,7 +93,7 @@
 
         <div class="toggle-row">
           <label class="switch">
-            <input type="checkbox" id="heat-toggle" role="switch">
+            <input type="checkbox" id="heat-toggle" role="switch" autocomplete="off">
             <span class="switch-track" aria-hidden="true"></span>
             <span>Mostrar mapa de risco</span>
           </label>
@@ -100,9 +113,31 @@
       <div id="map" aria-label="Mapa de São Paulo"></div>
       <div id="zoom-hint" class="map-toast" hidden>Aproxime o zoom (nível 12 ou mais) para ver o mapa de risco.</div>
       <div id="map-loading" class="map-toast" hidden>Carregando mapa de risco…</div>
+      <div id="nav-banner" class="nav-banner" hidden>
+        <div class="nav-main">
+          <span class="nav-icon" id="nav-icon" aria-hidden="true"></span>
+          <div class="nav-info">
+            <div class="nav-dist" id="nav-dist"></div>
+            <div class="nav-text" id="nav-text"></div>
+            <div class="nav-sub" id="nav-sub"></div>
+          </div>
+          <div class="nav-btns">
+            <button type="button" class="nav-btn" id="nav-recenter" hidden>Recentrar</button>
+            <button type="button" class="nav-btn nav-exit" id="nav-exit">Encerrar</button>
+          </div>
+        </div>
+        <div class="nav-off" id="nav-off" hidden>
+          <span>Você saiu da rota</span>
+          <button type="button" class="nav-btn nav-primary" id="nav-recalc">Recalcular</button>
+        </div>
+        <div class="nav-notice" id="nav-notice" hidden></div>
+        <div class="visually-hidden" id="nav-live" role="status" aria-live="polite"></div>
+      </div>
     </main>
   </div>
+  <div id="snack" class="snack" role="status" aria-live="polite" hidden></div>
 
+  <script src="config.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
   <script type="module" src="js/main.js"></script>

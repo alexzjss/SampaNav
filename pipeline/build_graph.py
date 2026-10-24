@@ -4,6 +4,8 @@ Uso:
     uv run python -m pipeline.build_graph [--modes walk drive] [--synthetic-risk]
     uv run python -m pipeline.build_graph --risk-only [--synthetic-risk]
 
+Os .npz são gravados sem compressão (carga ~4x mais rápida; o tar.gz do deploy comprime).
+
 Etapas:
   1. build_structure(mode): OSMnx -> arrays (nós, arestas, geometria). Cacheia o
      graphml em data/raw/osm_{mode}.graphml. Escreve data/processed/graph_{mode}.npz
@@ -65,6 +67,28 @@ def load_osm_graph(mode: str):
     return G
 
 
+def _first_str(v) -> str:
+    """Atributo OSM que pode ser str, lista (ou lista serializada) ou ausente -> 1ª string."""
+    if v is None:
+        return ""
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            if x:
+                return str(x)
+        return ""
+    if isinstance(v, float):  # NaN
+        return ""
+    s = str(v)
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            import ast
+
+            return _first_str(ast.literal_eval(s))
+        except (ValueError, SyntaxError):
+            pass
+    return s
+
+
 def build_structure(mode: str) -> dict:
     G = load_osm_graph(mode)
     if mode == "drive" and not any("travel_time" in d for _, _, d in G.edges(data=True)):
@@ -87,6 +111,10 @@ def build_structure(mode: str) -> dict:
     ttime = np.empty(m, np.float32)
     offsets = np.zeros(m + 1, np.int64)
     chunks: list[np.ndarray] = []
+    name_tab: dict[str, int] = {"": 0}
+    hw_tab: dict[str, int] = {"": 0}
+    ename = np.zeros(m, np.int32)
+    ehw = np.zeros(m, np.uint8)
     for k, (u, v, d) in enumerate(G.edges(data=True)):
         iu, iv = idx[u], idx[v]
         eu[k], ev[k] = iu, iv
@@ -96,6 +124,8 @@ def build_structure(mode: str) -> dict:
             ttime[k] = L / WALK_SPEED_MS
         else:
             ttime[k] = float(d.get("travel_time", L / 8.3))
+        ename[k] = name_tab.setdefault(_first_str(d.get("name")), len(name_tab))
+        ehw[k] = hw_tab.setdefault(_first_str(d.get("highway")), len(hw_tab))
         g = d.get("geometry")
         if g is not None:
             c = np.asarray(g.coords, dtype=np.float64)[:, :2]  # lon, lat
@@ -115,6 +145,10 @@ def build_structure(mode: str) -> dict:
         travel_time_s=ttime,
         geom_offsets=offsets,
         geom_coords=coords,
+        edge_name=ename,
+        edge_highway=ehw,
+        name_table=np.array(list(name_tab), dtype=np.str_),
+        highway_table=np.array(list(hw_tab), dtype=np.str_),
     )
     for p in PERIODS:
         out[f"risk_{p}"] = np.zeros(m, np.float32)
@@ -130,7 +164,6 @@ def sample_edges(offsets: np.ndarray, coords: np.ndarray):
     Retorna (edge_idx, lat, lon) de todas as amostras (vetorizado).
     """
     m = len(offsets) - 1
-    cnt = np.diff(offsets)
     lon = coords[:, 0].astype(np.float64)
     lat = coords[:, 1].astype(np.float64)
     coslat = math.cos(math.radians(-23.55))
@@ -166,7 +199,7 @@ def _cells(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
     import h3.api.basic_int as h3i
 
     f = h3i.latlng_to_cell
-    return np.fromiter((f(a, b, H3_RES) for a, b in zip(lat.tolist(), lon.tolist())), np.uint64, len(lat))
+    return np.fromiter((f(a, b, H3_RES) for a, b in zip(lat.tolist(), lon.tolist(), strict=False)), np.uint64, len(lat))
 
 
 def synthetic_field(lat, lon, salt: float = 0.0):
@@ -189,7 +222,6 @@ def make_synthetic_parquet(cells: np.ndarray, only_mode: str) -> None:
     uniq = np.unique(cells)
     ll = np.array([h3i.cell_to_latlng(int(c)) for c in uniq])
     strs = [h3i.int_to_str(int(c)) for c in uniq]
-    rng = np.random.default_rng(0)
     rows = []
     cats = ["roubo_pessoa", "furto_pessoa", "lesao"]
     for mi, mode in enumerate(MODES):
@@ -199,7 +231,7 @@ def make_synthetic_parquet(cells: np.ndarray, only_mode: str) -> None:
             r = synthetic_field(ll[:, 0], ll[:, 1], salt=mi * 0.7 + pi * 0.9)
             n = (r * 30).astype(int)
             tc = [
-                json.dumps({c: int(x * w) for c, w in zip(cats, (0.5, 0.35, 0.15)) if int(x * w)})
+                json.dumps({c: int(x * w) for c, w in zip(cats, (0.5, 0.35, 0.15), strict=False) if int(x * w)})
                 for x in n
             ]
             rows.append(
@@ -254,7 +286,7 @@ def join_risk(mode: str, synthetic: bool = False) -> None:
         cnt = np.bincount(edge_idx, minlength=m)
         data[f"risk_{period}"] = (tot / np.maximum(cnt, 1)).astype(np.float32)
     data["risk_source"] = np.array(src.name)
-    np.savez_compressed(p, **data)
+    np.savez(p, **data)
     print(
         f"[{mode}] risco gravado em {p.name} ({p.stat().st_size/1e6:.1f} MB, fonte {src.name}) "
         f"em {time.time()-t0:.1f}s",
@@ -273,7 +305,7 @@ def main() -> None:
         t0 = time.time()
         if not a.risk_only:
             data = build_structure(mode)
-            np.savez_compressed(graph_path(mode), **data)
+            np.savez(graph_path(mode), **data)
             print(
                 f"[{mode}] nós={len(data['node_id'])} arestas={len(data['edge_u'])} "
                 f"estrutura em {time.time()-t0:.0f}s",

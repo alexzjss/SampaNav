@@ -1,0 +1,66 @@
+name: Atualização mensal dos dados
+
+# Baixa os dados mais recentes da SSP-SP, recalcula o risco, junta ao grafo
+# viário da Release anterior (sem rebaixar o OSM) e publica uma nova Release.
+# O Dockerfile usa sempre a Release "latest", então o próximo deploy já pega
+# os dados novos; se RENDER_DEPLOY_HOOK_URL estiver configurado, o deploy é
+# disparado aqui mesmo.
+
+on:
+  schedule:
+    - cron: "0 9 10 * *" # dia 10 de cada mês, 06:00 em São Paulo
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen
+
+      - name: Baixar grafos e entradas da Release anterior
+        run: |
+          mkdir -p dist-prev data/processed data/raw
+          gh release download --pattern 'sampanav-*.tar.gz' --dir dist-prev
+          tar -xzf dist-prev/sampanav-data.tar.gz -C data/processed
+          if [ -f dist-prev/sampanav-inputs.tar.gz ]; then tar -xzf dist-prev/sampanav-inputs.tar.gz -C data/raw; fi
+
+      - name: Baixar planilhas da SSP-SP (24 meses cobrem até 3 anos-calendário)
+        run: |
+          Y=$(date -u +%Y)
+          PYTHONPATH=. uv run python -m pipeline.download_ssp --years $((Y-2)) $((Y-1)) $Y --skip-missing
+
+      - name: Recalcular risco
+        run: PYTHONPATH=. uv run python -m pipeline.build_risk --force
+
+      - name: Juntar risco ao grafo
+        run: PYTHONPATH=. uv run python -m pipeline.build_graph --risk-only
+
+      - name: Empacotar e publicar Release
+        run: |
+          PYTHONPATH=. uv run python -m pipeline.package_data
+          TAG="data-$(date -u +%Y-%m-%d)"
+          NOTES=$(python3 -c "import json; m=json.load(open('data/processed/risk_meta.json')); print(f\"Ocorrências de {m['date_min']} a {m['date_max']} ({m['n_occurrences']:,} registros). Gerado em {m['generated_at']}.\")")
+          gh release create "$TAG" data/dist/sampanav-data.tar.gz data/dist/sampanav-inputs.tar.gz \
+            --title "Dados $TAG" --notes "$NOTES" --latest
+
+      - name: Disparar deploy no Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        if: env.HOOK != ''
+        run: curl -fsS -X POST "$HOOK" > /dev/null

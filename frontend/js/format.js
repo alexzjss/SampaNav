@@ -56,16 +56,40 @@ export function currentPeriod() {
   return h < 6 ? 'madrugada' : h < 12 ? 'manha' : h < 18 ? 'tarde' : 'noite';
 }
 
-// Escala verde -> amarelo -> laranja -> vermelho (legível em daltonismo: varia também em luminância).
-const STOPS = [[0, [46, 158, 91]], [0.35, [242, 199, 68]], [0.65, [238, 129, 51]], [1, [192, 38, 45]]];
+// Escala de risco lida das variáveis CSS (--risk-0..3), que mudam no tema escuro.
+let stops = null;
+function hexToRgb(h) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(h.trim());
+  if (!m) return null;
+  let x = m[1];
+  if (x.length === 3) x = [...x].map((c) => c + c).join('');
+  return [0, 2, 4].map((k) => parseInt(x.slice(k, k + 2), 16));
+}
+const FALLBACK = [[46, 158, 91], [242, 199, 68], [238, 129, 51], [192, 38, 45]];
+const POS = [0, 0.35, 0.65, 1];
+/** Chame ao mudar o esquema de cores para reler as variáveis CSS. */
+export function resetRiskPalette() { stops = null; }
+function palette() {
+  if (stops) return stops;
+  const cs = getComputedStyle(document.documentElement);
+  stops = POS.map((p, i) => [p, hexToRgb(cs.getPropertyValue(`--risk-${i}`)) || FALLBACK[i]]);
+  return stops;
+}
 export function riskColor(r) {
   r = Math.min(1, Math.max(0, r));
-  for (let i = 1; i < STOPS.length; i++) {
-    if (r <= STOPS[i][0]) {
-      const [a, ca] = STOPS[i - 1], [b, cb] = STOPS[i];
+  const S = palette();
+  for (let i = 1; i < S.length; i++) {
+    if (r <= S[i][0]) {
+      const [a, ca] = S[i - 1], [b, cb] = S[i];
       const t = (r - a) / (b - a);
       return `rgb(${ca.map((c, k) => Math.round(c + (cb[k] - c) * t)).join(',')})`;
     }
   }
-  return 'rgb(192,38,45)';
+  return `rgb(${S[S.length - 1][1].join(',')})`;
+}
+/** Distância curta para navegação: "35 m", "1,2 km". */
+export function fmtMeters(m) {
+  if (m >= 1000) return `${(m / 1000).toFixed(1).replace('.', ',')} km`;
+  if (m >= 100) return `${Math.round(m / 10) * 10} m`;
+  return `${Math.max(0, Math.round(m / 5) * 5)} m`;
 }
