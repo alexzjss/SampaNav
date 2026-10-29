@@ -56,8 +56,7 @@ pelo risco, e a camada de calor mostra o risco por região em cada período do d
 </table>
 
 <sub>Capturas geradas com o backend real e os dados de setembro/2024 a agosto/2026
-(660 mil ocorrências). O mapa base das imagens é desenhado a partir das ruas do próprio
-grafo, então é mais simples que os tiles do OpenFreeMap usados no app. Para regerar:
+(660 mil ocorrências), sobre o mapa do OpenFreeMap usado no app. Para regerar:
 [`tools/screenshots`](tools/screenshots/README.md).</sub>
 
 ## Identidade visual

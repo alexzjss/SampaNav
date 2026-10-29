@@ -86,28 +86,25 @@ mas só se a validação passar.
    workflow**. Se a validação reprovar, o resumo da execução diz por quê, e nenhuma
    Release é publicada.
 
-## 5. Conferir o limite de requisições por IP
+## 5. Limite de requisições por IP (resolvido)
 
-A API limita requisições por IP, e o IP vem do primeiro valor do cabeçalho
-`X-Forwarded-For`. Falta confirmar como o proxy do Render preenche esse cabeçalho, porque
-um cliente pode tentar forjá-lo. Teste com 25 requisições, cada uma com um IP inventado
-diferente:
+Testado em produção em 29/10/2026: com `X-Forwarded-For` forjado e diferente a cada
+requisição, as 25 chamadas a `/api/routes` passavam (o limite era contornado). O Render
+fica atrás do Cloudflare, então a API passou a usar `CF-Connecting-IP`, que o Cloudflare
+sobrescreve com o IP real. Sem esse cabeçalho, usa a última entrada do `X-Forwarded-For`
+(a anexada pelo proxy). Se a API mudar de host, ajuste `SAMPANAV_CLIENT_IP_HEADER`.
+
+Para conferir de novo depois de um deploy, rode o laço abaixo. Mesmo com IPs inventados,
+deve aparecer `429` depois de umas 20 respostas `200`:
 
 ```bash
-API=https://<sua-api>.onrender.com
+API=https://sampanav-api.onrender.com
 for i in $(seq 1 25); do
   curl -s -o /dev/null -w "%{http_code} " -X POST "$API/api/routes" \
     -H 'Content-Type: application/json' -H "X-Forwarded-For: 10.0.0.$i" \
     -d '{"origin":{"lat":-23.5503,"lon":-46.6339},"destination":{"lat":-23.5614,"lon":-46.6559},"mode":"walk"}'
 done; echo
 ```
-
-- **Aparece `429` depois de umas 20 respostas `200`**: o Render sobrescreve o cabeçalho e
-  o limite funciona. Nada a fazer.
-- **Só aparece `200`**: o IP inventado está sendo aceito e o limite pode ser contornado.
-  Nesse caso, peça para ajustar `client_ip` em `backend/app/ratelimit.py` para usar a
-  entrada adicionada pelo proxy (a última da lista, ou a penúltima se houver dois
-  proxies), e repita o teste.
 
 ## 6. Cold start do plano free (opcional)
 
@@ -133,8 +130,6 @@ app já mostra o aviso e abre a interface na hora (PWA). Se quiser evitar a espe
       ainda diz "verificar termos de uso".
 - [ ] Teste a instalação como app no celular: no Chrome (Android), "Instalar app"; no
       Safari (iOS), "Compartilhar → Adicionar à Tela de Início".
-- [ ] Se quiser, regere as capturas do README com os tiles reais, num computador com
-      internet: `BASEMAP=real tools/screenshots/run.sh <pasta_dos_dados>`.
 
 ## 8. Domínio próprio (opcional)
 
