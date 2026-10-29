@@ -96,7 +96,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
-    print(load_light(args.force).describe())
+    light = load_light(args.force)
+    if light is not None:
+        print(light.describe())
 
 
 if __name__ == "__main__":

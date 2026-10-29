@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import os
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 
 from fastapi import HTTPException, Request
 
@@ -23,9 +25,10 @@ DETAIL = "Muitas requisições; aguarde um instante e tente novamente."
 def client_ip(request: Request) -> str:
     xff = request.headers.get("x-forwarded-for", "")
     first = xff.split(",")[0].strip()
-    if first:
-        return first
-    return request.client.host if request.client else "unknown"
+    try:  # só IPs válidos viram chave (um valor arbitrário/gigante estouraria a memória do limitador)
+        return str(ipaddress.ip_address(first))
+    except ValueError:
+        return request.client.host if request.client else "unknown"
 
 
 def anon(ip: str) -> str:
@@ -48,7 +51,7 @@ def load_rates(overrides: dict | None = None) -> dict[str, int]:
 
 
 class RateLimiter:
-    def __init__(self, rates: dict[str, int], window_s: float = WINDOW_S, clock=time.monotonic):
+    def __init__(self, rates: dict[str, int], window_s: float = WINDOW_S, clock: Callable[[], float] = time.monotonic) -> None:
         self.rates = rates
         self.window = window_s
         self.clock = clock
@@ -83,7 +86,7 @@ class RateLimiter:
                 del self._hits[k]
 
 
-def rate_limit(name: str):
+def rate_limit(name: str) -> Callable[[Request], None]:
     """Dependência FastAPI: aplica o limite `name` ao IP do cliente."""
 
     def dep(request: Request) -> None:

@@ -72,7 +72,8 @@ def _gender(name: str) -> str | None:
 def fmt_dist(m: float) -> str:
     if m < 1000:
         v = int(round(m)) if m < 20 else int(round(m / 10.0) * 10)
-        return f"{max(v, 1)} m"
+        if v < 1000:
+            return f"{max(v, 1)} m"
     return f"{m / 1000.0:.1f}".replace(".", ",") + " km"
 
 

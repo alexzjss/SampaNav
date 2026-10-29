@@ -40,3 +40,9 @@ extend-exclude = ["data", ".venv"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # TestClient do Starlette 1.x prefere httpx2; o httpx de produção (geocode) segue o mesmo para os testes
+    "ignore:Using .httpx. with .starlette.testclient. is deprecated",
+]
