@@ -27,6 +27,11 @@ export async function geocode(q) {
   const n = q.toLowerCase();
   return PLACES.filter((p) => p.label.toLowerCase().includes(n)).slice(0, 6);
 }
+export async function reverse(lat, lon) {
+  await delay(200);
+  const near = PLACES.find((p) => Math.abs(p.lat - lat) < 0.003 && Math.abs(p.lon - lon) < 0.003);
+  return near ? { ...near } : { label: `Rua Exemplo, ${Math.abs(Math.round(lat * 1e4) % 1000)}, São Paulo`, lat, lon };
+}
 function line(a, b, bend, n = 24) {
   const pts = [];
   for (let i = 0; i <= n; i++) {

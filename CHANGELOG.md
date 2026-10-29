@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-10-29
+
+### Adicionado
+
+- Geocodificação reversa (`GET /api/reverse`): clique ou arraste no mapa mostra o
+  endereço em vez de coordenadas.
+- Instruções faladas em português na navegação, com botão para desligar.
+- Tempo restante e hora prevista de chegada no banner de navegação.
+- Janela "Sobre e limitações" com funcionamento do modelo, limitações e fontes.
+- Explicação dos níveis de risco (relativos às ruas da cidade) nos cartões de rota.
+- PWA: manifesto, ícones e service worker para a interface (a API nunca é cacheada).
+
 ## [1.0.0] - 2026-10-29
 
 Primeira versão pública, reescrita sobre dados reais da cidade de São Paulo.

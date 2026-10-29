@@ -1,4 +1,4 @@
-import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, levelClass, LEVEL_LABELS } from './format.js';
+import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, levelClass, levelHint, LEVEL_LABELS, LEVEL_NOTE } from './format.js';
 import { maneuverIcon } from './icons.js';
 import { loadHistory, clearHistory } from './history.js';
 
@@ -117,6 +117,17 @@ export function setupUi(h) {
     toggle.setAttribute('aria-expanded', String(!c));
   });
 
+  // ---- Sobre e limitações ----
+  const about = $('about-dialog'), aboutBtn = $('about-open');
+  if (about && typeof about.showModal === 'function') {
+    aboutBtn.addEventListener('click', () => about.showModal());
+    $('about-close').addEventListener('click', () => about.close());
+    // clique no backdrop (alvo é o próprio <dialog>) fecha
+    about.addEventListener('click', (e) => { if (e.target === about) about.close(); });
+    about.addEventListener('close', () => aboutBtn.focus());
+  } else aboutBtn?.remove();
+  $('level-note').textContent = LEVEL_NOTE;
+
   $('server-retry').addEventListener('click', () => h.onServerRetry?.());
   refreshRecents();
 
@@ -127,7 +138,9 @@ export function setupUi(h) {
     setInput(kind, text) { (kind === 'origin' ? originIn : destIn).value = text; },
     setHint(t) { $('map-hint').textContent = t; },
     setMeta(m) {
-      $('period-range').textContent = m ? `${fmtDate(m.date_min)} a ${fmtDate(m.date_max)}` : 'indisponível';
+      const t = m ? `${fmtDate(m.date_min)} a ${fmtDate(m.date_max)}` : 'indisponível';
+      $('period-range').textContent = t;
+      const ar = $('about-range'); if (ar) ar.textContent = t;
     },
     toast(id, show) { $(id).hidden = !show; },
     collapseSheet(c) { if (innerWidth < 768) { panel.classList.toggle('collapsed', c); toggle.setAttribute('aria-expanded', String(!c)); } },
@@ -146,7 +159,7 @@ export function setupUi(h) {
         b.setAttribute('aria-pressed', String(sel));
         b.innerHTML = `
           <div class="card-top"><span class="card-label">${esc(r.label)}</span>
-            <span class="badge ${levelClass(r.risk_level)}">${esc((LEVEL_LABELS[r.risk_level] || r.risk_level))}</span></div>
+            <span class="badge ${levelClass(r.risk_level)}" title="${esc(levelHint(r.risk_level))}">${esc((LEVEL_LABELS[r.risk_level] || r.risk_level))}</span></div>
           <p class="card-metrics">${fmtDuration(r.duration_s)}<small>${fmtKm(r.distance_m)}</small></p>
           <p class="card-vs">${esc(vsTextMinutes(r, fastest))}</p>
           <p class="card-cats">${cats.length ? 'Mais registrados: ' + esc(cats.join(', ')) : 'Poucos registros no trajeto'}</p>`;

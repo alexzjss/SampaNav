@@ -1,4 +1,4 @@
-import { getMeta, geocode, postRoutes, getRisk, isMock, waitForServer } from './api.js';
+import { getMeta, geocode, reverseGeocode, postRoutes, getRisk, isMock, waitForServer } from './api.js';
 import { createMap, HEAT_MIN_ZOOM } from './map.js';
 import { setupUi } from './ui.js';
 import { setupNavBanner } from './navui.js';
@@ -38,10 +38,11 @@ const ui = setupUi({
 const mapApi = createMap({
   onMapClick(p) {
     if (nav.isActive()) return;
-    if (!state.origin) setPoint('origin', p, coordLabel(p));
-    else setPoint('dest', p, coordLabel(p));
+    const kind = state.origin ? 'dest' : 'origin';
+    setPoint(kind, p, coordLabel(p));
+    resolveLabel(kind, p);
   },
-  onMarkerDrag(kind, p) { setPoint(kind, p, coordLabel(p)); },
+  onMarkerDrag(kind, p) { setPoint(kind, p, coordLabel(p)); resolveLabel(kind, p); },
   onRouteClick: select,
   onMoveEnd: refreshHeat,
   onUserPan: () => nav.userPanned(),
@@ -72,6 +73,23 @@ function setPoint(kind, p, label, updateInput = true) {
   if (updateInput || p === null) { /* mudança de ponto invalida rotas */ if (state.routes.length) clearRoutes(); }
   ui.setHint(!state.origin ? 'Dica: clique no mapa para definir a origem. Arraste os marcadores para ajustar.'
     : !state.dest ? 'Agora clique no mapa para definir o destino.' : 'Pronto. Toque em "Calcular rotas".');
+}
+
+/** Troca só o rótulo do ponto (não invalida rotas já calculadas). */
+function setLabel(kind, label) {
+  if (kind === 'origin') state.originLabel = label; else state.destLabel = label;
+  ui.setInput(kind, label);
+}
+
+/** Geocodificação reversa em segundo plano; falha silenciosa mantém as coordenadas. */
+const revSeq = { origin: 0, dest: 0 };
+async function resolveLabel(kind, p) {
+  const seq = ++revSeq[kind];
+  if (!state.serverReady) return;
+  try {
+    const r = await reverseGeocode(p.lat, p.lon);
+    if (r && r.label && seq === revSeq[kind] && state[kind] === p) setLabel(kind, r.label);
+  } catch { /* mantém coordenadas */ }
 }
 
 function clearRoutes() {

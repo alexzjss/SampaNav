@@ -7,6 +7,15 @@ export const CATEGORY_LABELS = {
   letal: 'Crimes letais e tentativas',
 };
 export const LEVEL_LABELS = { baixo: 'Risco baixo', moderado: 'Risco moderado', alto: 'Risco alto', 'muito alto': 'Risco muito alto' };
+/** Significado de cada nível (relativo às ruas da cidade, mesmo modo/período). */
+export const LEVEL_HINTS = {
+  baixo: 'Risco baixo: no nível da metade menos arriscada das ruas da cidade.',
+  moderado: 'Risco moderado: acima de 50% das ruas da cidade.',
+  alto: 'Risco alto: acima de 75% das ruas da cidade.',
+  'muito alto': 'Risco muito alto: acima de 90% das ruas da cidade.',
+};
+export const LEVEL_NOTE = 'Níveis comparam o trajeto com as ruas da cidade no mesmo período: moderado = acima da metade das ruas; alto = acima de 75%; muito alto = acima de 90%.';
+export const levelHint = (level) => LEVEL_HINTS[level] || LEVEL_NOTE;
 
 export function fmtDuration(s) {
   const min = Math.max(1, Math.round(s / 60));

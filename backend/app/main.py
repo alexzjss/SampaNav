@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app import geocode as geo
 from backend.app.ratelimit import RateLimiter, load_rates, rate_limit
 from backend.app.routing import PROFILES, Engine, EngineBusy, RoutingError
-from pipeline.config import DATA_PROCESSED, PERIODS, ROOT
+from pipeline.config import DATA_PROCESSED, PERIODS, ROOT, SP_BBOX
 
 log = logging.getLogger("sampanav")
 if not log.handlers and not logging.getLogger().handlers:  # uvicorn não configura loggers da aplicação
@@ -180,7 +180,7 @@ def create_app(
         yield
         await geo.close()
 
-    app = FastAPI(title="SampaNav", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="SampaNav", version="1.1.0", lifespan=lifespan)
     app.state.limiter = RateLimiter(load_rates(rate_limits))
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     origins = allowed_origins()
@@ -220,6 +220,15 @@ def create_app(
     async def geocode_ep(q: str = Query("", max_length=200)):
         try:
             return await geo.geocode(q)
+        except geo.GeocodeError as e:
+            raise HTTPException(502, str(e)) from e
+
+    @app.get("/api/reverse", response_model=GeocodeItem | None, dependencies=[Depends(rate_limit("geocode"))])
+    async def reverse_ep(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180)):
+        if not (SP_BBOX[0] <= lon <= SP_BBOX[2] and SP_BBOX[1] <= lat <= SP_BBOX[3]):
+            raise HTTPException(400, "Ponto fora da região de São Paulo.")
+        try:
+            return await geo.reverse(lat, lon)
         except geo.GeocodeError as e:
             raise HTTPException(502, str(e)) from e
 

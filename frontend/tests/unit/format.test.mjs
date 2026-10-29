@@ -126,3 +126,13 @@ test('riskColor lê variáveis CSS quando válidas (e hex curto)', () => {
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' });
   f.resetRiskPalette();
 });
+
+test('LEVEL_HINTS cobre todos os níveis e levelHint tem fallback', () => {
+  for (const k of Object.keys(f.LEVEL_LABELS)) assert.match(f.LEVEL_HINTS[k], /\S/);
+  assert.match(f.LEVEL_HINTS.alto, /75%/);
+  assert.match(f.LEVEL_HINTS['muito alto'], /90%/);
+  assert.match(f.LEVEL_HINTS.moderado, /50%/);
+  assert.equal(f.levelHint('alto'), f.LEVEL_HINTS.alto);
+  assert.equal(f.levelHint('?'), f.LEVEL_NOTE);
+  assert.match(f.LEVEL_NOTE, /75%.*90%/);
+});
