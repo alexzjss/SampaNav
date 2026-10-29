@@ -32,6 +32,7 @@ input[type=text], select {
 .seg { display: block; }
 .seg label { display: inline-block; position: relative; }
 .seg > label:first-of-type span { border-radius: 10px 0 0 10px; }
+.seg > label:not(:first-of-type):not(:last-of-type) span { border-radius: 0; margin-left: -1px; }
 .seg > label:last-of-type span { border-radius: 0 10px 10px 0; margin-left: -1px; }
 .seg span {
   display: inline-block; min-height: 44px; line-height: 42px; padding: 0 16px; cursor: pointer;
@@ -77,6 +78,24 @@ input[type=text], select {
 .pin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); cursor: grab; }
 .pin.origin { background: #1a5fd0; }
 .pin.dest { background: #c0262d; }
+.pin.via { background: #7b3fc4; }
+.via-combo { display: flex; align-items: center; gap: 8px; }
+.via-combo input { flex: 1; min-width: 0; }
+.via-remove { font-size: 22px; line-height: 1; }
+.via-field[hidden], .via-field + .link-btn[hidden] { display: none; }
+.hint[hidden] { display: none; }
+
+/* ---- exposição por período ---- */
+.periods { margin-top: 10px; }
+.periods h3 { margin: 0 0 4px; font-size: 14px; }
+.periods ul { list-style: none; margin: 0; padding: 0; }
+.period-row { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; padding: 2px 6px; border-radius: 8px; }
+.period-row.current { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.period-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.period-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.period-val { text-align: right; white-space: nowrap; color: var(--text-muted); font-size: 12.5px; }
+.period-val b { color: var(--text); font-weight: 700; margin-right: 4px; }
+@media (max-width: 400px) { .period-row { grid-template-columns: 64px 1fr auto; gap: 6px; } }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
 /* ---- Fase 2 ---- */

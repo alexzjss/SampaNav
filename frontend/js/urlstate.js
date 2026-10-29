@@ -1,5 +1,5 @@
-// Estado compartilhável na URL: ?o=lat,lon&d=lat,lon&m=walk|drive&p=período&r=id&on=rótulo&dn=rótulo
-const OWN = ['o', 'd', 'm', 'p', 'r', 'on', 'dn'];
+// Estado compartilhável na URL: ?o=lat,lon&d=lat,lon&m=walk|drive|bike&p=período&r=id&on=rótulo&dn=rótulo&v=lat,lon&vn=rótulo
+const OWN = ['o', 'd', 'm', 'p', 'r', 'on', 'dn', 'v', 'vn'];
 const PERIODS = ['now', 'all', 'madrugada', 'manha', 'tarde', 'noite'];
 
 function parsePt(s) {
@@ -19,10 +19,11 @@ export function readUrlState() {
   const label = (k) => (q.get(k) || '').trim().slice(0, 120) || null;
   return {
     o, d,
-    mode: m === 'drive' ? 'drive' : 'walk',
+    v: parsePt(q.get('v')),
+    mode: m === 'drive' || m === 'bike' ? m : 'walk',
     period: PERIODS.includes(p) ? p : 'now',
     route: r && /^[\w-]{1,32}$/.test(r) ? r : null,
-    oLabel: label('on'), dLabel: label('dn'),
+    oLabel: label('on'), dLabel: label('dn'), vLabel: label('vn'),
   };
 }
 
@@ -36,6 +37,7 @@ export function buildUrl(s) {
     if (s.route) q.set('r', s.route);
     if (s.originLabel) q.set('on', s.originLabel);
     if (s.destLabel) q.set('dn', s.destLabel);
+    if (s.via) { q.set('v', fmtPt(s.via)); if (s.viaLabel) q.set('vn', s.viaLabel); }
   }
   const qs = q.toString();
   return `${location.origin}${location.pathname}${qs ? '?' + qs : ''}`;

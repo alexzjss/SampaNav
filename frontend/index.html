@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SampaNav</title>
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <meta name="description" content="Rotas a pé e de carro em São Paulo que equilibram tempo e exposição a ocorrências registradas.">
+  <meta name="description" content="Rotas a pé, de bike e de carro em São Paulo que equilibram tempo e exposição a ocorrências registradas.">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
@@ -53,6 +53,15 @@
                   <ul id="dest-list" class="suggestions" role="listbox" hidden></ul>
                 </div>
               </div>
+              <div class="field via-field" id="via-field" hidden>
+                <label for="via-input">Parada</label>
+                <div class="combo via-combo">
+                  <input id="via-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="via-list" placeholder="Passar por (opcional)" enterkeyhint="search">
+                  <ul id="via-list" class="suggestions" role="listbox" hidden></ul>
+                  <button type="button" class="icon-btn via-remove" id="via-remove" aria-label="Remover parada" title="Remover parada">×</button>
+                </div>
+              </div>
+              <button type="button" class="link-btn" id="via-add">+ Adicionar parada</button>
             </div>
             <button type="button" class="icon-btn" id="swap" aria-label="Inverter origem e destino" title="Inverter origem e destino">
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 4v16M8 20l-4-4M8 20l4-4M16 20V4M16 4l-4 4M16 4l4 4"/></svg>
@@ -67,11 +76,13 @@
           </section>
           <p class="hint" id="map-hint">Dica: clique no mapa para definir a origem e depois o destino. Arraste os marcadores para ajustar.</p>
 
+          <p class="hint" id="bike-note" hidden>Rotas de bicicleta usam a malha a pé: podem incluir contramão e trechos em que é preciso empurrar a bike.</p>
           <div class="controls">
             <fieldset class="seg" aria-label="Modo de deslocamento">
               <legend>Modo</legend>
               <label><input type="radio" name="mode" value="walk" checked><span>A pé</span></label>
               <label><input type="radio" name="mode" value="drive"><span>Carro</span></label>
+              <label id="mode-bike"><input type="radio" name="mode" value="bike"><span>Bike</span></label>
             </fieldset>
             <div class="field period">
               <label for="period">Período</label>

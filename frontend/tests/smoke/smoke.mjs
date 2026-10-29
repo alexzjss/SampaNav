@@ -60,6 +60,34 @@ try {
   check(/rotas encontradas/.test(await page.locator('#status').innerText()), 'status "rotas encontradas"');
   check(new URL(page.url()).searchParams.has('o'), 'URL compartilhável atualizada (?o=…)');
 
+  // bloco de exposição por período (rota selecionada) e destaque do período atual
+  check(await page.locator('.periods .period-row').count() === 4, 'bloco "Exposição por período" com 4 linhas');
+  check(await page.locator('.periods .period-row.current').count() === 1, 'período atual destacado');
+
+  // GPX
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10000 }), page.click('[data-act=gpx]')]);
+  check(/\.gpx$/i.test(dl.suggestedFilename()), `download GPX (${dl.suggestedFilename()})`);
+
+  // modo bike: nota visível e recálculo
+  await page.check('input[name=mode][value=bike]', { force: true });
+  check(await page.locator('#bike-note').isVisible(), 'nota de bicicleta visível');
+  await page.click('#calc');
+  await page.waitForFunction(() => document.querySelectorAll('#route-cards .card').length === 3, null, { timeout: 15000 });
+  check(await page.locator('#route-cards .card').count() === 3, 'modo bike: 3 cartões');
+  check(new URL(page.url()).searchParams.get('m') === 'bike', 'URL com m=bike');
+
+  // parada: campo extra via geocode do mock
+  await page.click('#via-add');
+  await pick('via-input', 'Consola');
+  await page.click('#calc');
+  await page.waitForFunction(() => document.querySelectorAll('#route-cards .card').length === 3, null, { timeout: 15000 });
+  await page.locator('.steps summary').click();
+  const wp = await page.locator('.steps-list .step-text', { hasText: 'Chegada à parada' }).count();
+  check(wp === 1, 'passo "waypoint" na lista de passos');
+  check(new URL(page.url()).searchParams.has('v'), 'URL com parada (v=…)');
+  await page.click('#via-remove');
+  check(await page.locator('#route-cards .card').count() === 0, 'remover parada limpa as rotas');
+
   check(errors.length === 0, `sem erros no console${errors.length ? ':\n  ' + errors.join('\n  ') : ''}`);
 } catch (e) {
   console.error(`FAIL ${e.message.split('\n')[0]}`);

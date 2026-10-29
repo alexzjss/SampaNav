@@ -18,7 +18,7 @@ test('estado válido com defaults', () => {
   setUrl('?' + base);
   assert.deepEqual(readUrlState(), {
     o: { lat: -23.55, lon: -46.63 }, d: { lat: -23.56, lon: -46.65 },
-    mode: 'walk', period: 'now', route: null, oLabel: null, dLabel: null,
+    mode: 'walk', period: 'now', route: null, oLabel: null, dLabel: null, v: null, vLabel: null,
   });
 });
 
@@ -35,9 +35,11 @@ test('modo e período: valores inválidos caem no padrão', () => {
   setUrl(`?${base}&m=drive&p=noite`);
   let s = readUrlState();
   assert.equal(s.mode, 'drive'); assert.equal(s.period, 'noite');
-  setUrl(`?${base}&m=bike&p=meia-noite`);
+  setUrl(`?${base}&m=skate&p=meia-noite`);
   s = readUrlState();
   assert.equal(s.mode, 'walk'); assert.equal(s.period, 'now');
+  setUrl(`?${base}&m=bike`);
+  assert.equal(readUrlState().mode, 'bike');
   for (const p of ['now', 'all', 'madrugada', 'manha', 'tarde', 'noite']) {
     setUrl(`?${base}&p=${p}`);
     assert.equal(readUrlState().period, p);
@@ -91,7 +93,7 @@ test('round-trip buildUrl -> readUrlState', () => {
   globalThis.location = new URL(url);
   assert.deepEqual(readUrlState(), {
     o: s.origin, d: s.dest, mode: 'drive', period: 'tarde', route: 'equilibrada',
-    oLabel: s.originLabel, dLabel: s.destLabel,
+    oLabel: s.originLabel, dLabel: s.destLabel, v: null, vLabel: null,
   });
   assert.equal(new URL(url).searchParams.get('mock'), '1');
 });
@@ -113,4 +115,24 @@ test('writeUrlState chama history.replaceState e tolera exceção', () => {
   assert.equal(calls[0][2], 'http://example.com/app/?o=1.00000%2C2.00000&d=3.00000%2C4.00000&m=walk&p=now');
   globalThis.history = { replaceState() { throw new Error('SecurityError'); } };
   assert.doesNotThrow(() => writeUrlState(null));
+});
+
+test('parada (v/vn): leitura, inválida vira null, round-trip e remoção', () => {
+  setUrl(`?${base}&v=-23.551,-46.64&vn=${encodeURIComponent('Praça X')}`);
+  let s = readUrlState();
+  assert.deepEqual(s.v, { lat: -23.551, lon: -46.64 }); assert.equal(s.vLabel, 'Praça X');
+  setUrl(`?${base}&v=abc`);
+  s = readUrlState();
+  assert.equal(s.v, null); assert.equal(s.vLabel, null);
+  const st = { origin: { lat: 1, lon: 2 }, dest: { lat: 3, lon: 4 }, via: { lat: -23.5512, lon: -46.64 }, viaLabel: 'Parada A', mode: 'bike', period: 'noite' };
+  setUrl('?mock=1');
+  const url = buildUrl(st);
+  const q = new URL(url).searchParams;
+  assert.equal(q.get('v'), '-23.55120,-46.64000'); assert.equal(q.get('vn'), 'Parada A'); assert.equal(q.get('m'), 'bike');
+  globalThis.location = new URL(url);
+  s = readUrlState();
+  assert.deepEqual(s.v, { lat: -23.5512, lon: -46.64 }); assert.equal(s.vLabel, 'Parada A'); assert.equal(s.mode, 'bike');
+  const q2 = new URL(buildUrl({ ...st, via: null })).searchParams;
+  assert.equal(q2.has('v'), false); assert.equal(q2.has('vn'), false);
+  assert.equal(new URL(buildUrl(null)).searchParams.has('v'), false);
 });

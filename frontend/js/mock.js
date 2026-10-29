@@ -20,7 +20,7 @@ export async function health() {
 export async function meta() {
   await delay(100);
   return { generated_at: '2026-10-20T12:00:00', date_min: '2024-09-01', date_max: '2026-08-31', n_occurrences: 123456,
-    profiles: ['rapida', 'equilibrada', 'segura'], periods: ['all', 'madrugada', 'manha', 'tarde', 'noite'] };
+    profiles: ['rapida', 'equilibrada', 'segura'], modes: ['walk', 'drive', 'bike'], periods: ['all', 'madrugada', 'manha', 'tarde', 'noite'] };
 }
 export async function geocode(q) {
   await delay(200);
@@ -57,26 +57,27 @@ const VERB = {
 };
 const fmtM = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`);
 /** Passos no formato da seção 9 do contrato (maneuver, instruction, street, distance_m, duration_s, location, geometry_index). */
-function makeSteps(coords, speed, seed) {
+function makeSteps(coords, speed, seed, viaIdx = -1) {
   const n = coords.length - 1;
-  const idx = [0, 4, 9, 14, 19, n].filter((v, i, a) => a.indexOf(v) === i);
+  const idx = (viaIdx > 0 ? [0, 8, 16, viaIdx, 32, 40, n] : [0, 4, 9, 14, 19, n]).filter((v, i, a) => a.indexOf(v) === i);
   return idx.map((gi, k) => {
     const last = k === idx.length - 1;
     const street = STREETS[(k + seed) % STREETS.length];
-    const maneuver = k === 0 ? 'depart' : last ? 'arrive' : TURNS[(k + seed) % TURNS.length];
+    const maneuver = k === 0 ? 'depart' : last ? 'arrive' : gi === viaIdx ? 'waypoint' : TURNS[(k + seed) % TURNS.length];
     const d = last ? 0 : dist(coords.slice(gi, idx[k + 1] + 1));
     const len = fmtM(d);
     const instruction = last ? 'Chegada ao destino'
+      : maneuver === 'waypoint' ? 'Chegada à parada; siga em frente'
       : k === 0 ? `Siga pela ${street} por ${len}`
       : `${VERB[maneuver]} na ${street}`;
     return { maneuver, instruction, street: last ? '' : street, distance_m: +d.toFixed(1), duration_s: Math.round(d / speed),
       location: coords[gi], geometry_index: gi };
   });
 }
-export async function routes({ origin, destination, mode, period }) {
+export async function routes({ origin, destination, mode, period, via = null }) {
   await delay(500);
   const inSp = (p) => p.lat > -24.01 && p.lat < -23.35 && p.lon > -46.83 && p.lon < -46.36;
-  if (!inSp(origin) || !inSp(destination)) {
+  if (!inSp(origin) || !inSp(destination) || (via && !inSp(via))) {
     const e = new Error('Origem ou destino fora do município de São Paulo.'); throw e;
   }
   const defs = [
@@ -84,15 +85,20 @@ export async function routes({ origin, destination, mode, period }) {
     ['equilibrada', 'Equilibrada', 2, 0.07, 0.38, { furto_pessoa: 80, roubo_pessoa: 22, roubo_veiculo: 4 }],
     ['segura', 'Mais segura', 6, -0.09, 0.2, { furto_pessoa: 44, lesao: 6, letal: 1 }],
   ];
-  const speed = mode === 'walk' ? 1.3 : 7;
+  const speed = mode === 'walk' ? 1.3 : mode === 'bike' ? 4.2 : 7;
+  const cur = period === 'now' ? 'noite' : period;
   let base;
   const out = defs.map(([id, label, alpha, bend, avg, cats], i) => {
-    const coords = line(origin, destination, bend);
+    const coords = via ? [...line(origin, via, bend), ...line(via, destination, bend).slice(1)] : line(origin, destination, bend);
     const d = dist(coords) * (1 + i * 0.06);
     const dur = d / speed;
     const exposure = (d / 1000) * avg;
     if (i === 0) base = { dur, exposure };
     const level = avg < 0.15 ? 'baixo' : avg < 0.35 ? 'moderado' : avg < 0.6 ? 'alto' : 'muito alto';
+    const FACTOR = { madrugada: 1.5, manha: 0.7, tarde: 0.9, noite: 1.3 };
+    const lvl = (a) => (a < 0.15 ? 'baixo' : a < 0.35 ? 'moderado' : a < 0.6 ? 'alto' : 'muito alto');
+    const exposure_by_period = {}, level_by_period = {};
+    for (const [p, f] of Object.entries(FACTOR)) { exposure_by_period[p] = +(exposure * f).toFixed(2); level_by_period[p] = lvl(avg * f); }
     const k = 6, segs = [];
     for (let s = 0; s < k; s++) {
       const a = Math.floor((s * (coords.length - 1)) / k), b = Math.floor(((s + 1) * (coords.length - 1)) / k);
@@ -102,10 +108,10 @@ export async function routes({ origin, destination, mode, period }) {
     return { id, label, alpha, distance_m: +d.toFixed(1), duration_s: Math.round(dur), exposure: +exposure.toFixed(2),
       avg_risk: avg, risk_level: level,
       vs_fastest: { duration_pct: +(((dur / base.dur) - 1) * 100).toFixed(1), exposure_pct: +(((exposure / base.exposure) - 1) * 100).toFixed(1) },
-      categories: cats, geometry: { type: 'LineString', coordinates: coords }, segments: segs,
-      steps: new URLSearchParams(location.search).has('nosteps') ? undefined : makeSteps(coords, speed, i) };
+      exposure_by_period, level_by_period, categories: cats, geometry: { type: 'LineString', coordinates: coords }, segments: segs,
+      steps: new URLSearchParams(location.search).has('nosteps') ? undefined : makeSteps(coords, speed, i, via ? (coords.length - 1) / 2 : -1) };
   });
-  return { mode, period: period === 'now' ? 'noite' : period, routes: out,
+  return { mode, period: cur, via: via || null, routes: out,
     data: { date_min: '2024-09-01', date_max: '2026-08-31', source: 'SSP-SP' } };
 }
 export async function risk(bbox) {

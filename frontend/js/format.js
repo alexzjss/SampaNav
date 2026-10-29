@@ -102,3 +102,25 @@ export function fmtMeters(m) {
   if (m >= 100) return `${Math.round(m / 10) * 10} m`;
   return `${Math.max(0, Math.round(m / 5) * 5)} m`;
 }
+
+export const PERIOD_KEYS = ['madrugada', 'manha', 'tarde', 'noite'];
+const PERIOD_NAMES = { madrugada: 'Madrugada', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
+/**
+ * Linhas da comparação por período: { key, label, value, pct, level, current }.
+ * pct = largura da barra (0-100) em relação ao maior valor; [] sem dados.
+ */
+export function periodRows(route, currentPeriod) {
+  const ex = route?.exposure_by_period;
+  if (!ex) return [];
+  const vals = PERIOD_KEYS.map((k) => (Number.isFinite(ex[k]) ? ex[k] : null));
+  if (vals.every((v) => v == null)) return [];
+  const max = Math.max(...vals.map((v) => v ?? 0));
+  return PERIOD_KEYS.map((key, i) => ({
+    key, label: PERIOD_NAMES[key], value: vals[i],
+    pct: vals[i] == null || max <= 0 ? 0 : Math.round((vals[i] / max) * 100),
+    level: route.level_by_period?.[key] || null,
+    current: key === currentPeriod,
+  }));
+}
+/** Exposição para exibição: 1 casa decimal, vírgula. */
+export function fmtExposure(v) { return v == null ? '–' : v.toFixed(1).replace('.', ','); }
