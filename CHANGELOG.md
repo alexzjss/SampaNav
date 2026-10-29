@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.1] - 2026-10-29
+
+### Corrigido
+
+- Limite de requisições por IP podia ser contornado com `X-Forwarded-For` forjado
+  (confirmado em produção). A API usa `CF-Connecting-IP` (Cloudflare, na frente do
+  Render) e, sem ele, a última entrada do `X-Forwarded-For`.
+
+### Alterado
+
+- Capturas do README regeradas sobre o mapa real do OpenFreeMap.
+
 ## [1.4.0] - 2026-10-29
 
 ### Alterado

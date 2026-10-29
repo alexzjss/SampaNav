@@ -22,13 +22,29 @@ PRUNE_EVERY_S = 60.0
 DETAIL = "Muitas requisições; aguarde um instante e tente novamente."
 
 
-def client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for", "")
-    first = xff.split(",")[0].strip()
+def _valid_ip(raw: str) -> str | None:
     try:  # só IPs válidos viram chave (um valor arbitrário/gigante estouraria a memória do limitador)
-        return str(ipaddress.ip_address(first))
+        return str(ipaddress.ip_address(raw.strip()))
     except ValueError:
-        return request.client.host if request.client else "unknown"
+        return None
+
+
+def client_ip(request: Request) -> str:
+    """IP do cliente para o limitador, sem confiar no que o próprio cliente manda.
+
+    1. Cabeçalho do proxy de borda (`SAMPANAV_CLIENT_IP_HEADER`, padrão `cf-connecting-ip`):
+       o Render fica atrás do Cloudflare, que sobrescreve esse cabeçalho com o IP real.
+    2. Sem ele, a ÚLTIMA entrada do X-Forwarded-For, que é a anexada pelo proxy mais
+       próximo; a primeira vem do cliente e pode ser forjada (medido em produção).
+    3. Sem proxy, o IP da conexão.
+    """
+    name = os.environ.get("SAMPANAV_CLIENT_IP_HEADER", "cf-connecting-ip").strip().lower()
+    if name and (ip := _valid_ip(request.headers.get(name, ""))):
+        return ip
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff and (ip := _valid_ip(xff.rsplit(",", 1)[-1])):
+        return ip
+    return request.client.host if request.client else "unknown"
 
 
 def anon(ip: str) -> str:
