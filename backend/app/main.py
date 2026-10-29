@@ -227,6 +227,21 @@ def create_app(
         out["risk_source"] = e.risk_path.name if e.risk_path else None
         return out
 
+    @app.get("/api/whoami", include_in_schema=False)
+    def whoami(request: Request):
+        """Diagnóstico temporário: como a API enxerga quem chama (só os dados do próprio chamador)."""
+        from backend.app.ratelimit import client_ip
+
+        h = request.headers
+        return {
+            "client_ip": client_ip(request),
+            "x_forwarded_for": h.get("x-forwarded-for"),
+            "cf_connecting_ip": h.get("cf-connecting-ip"),
+            "true_client_ip": h.get("true-client-ip"),
+            "x_real_ip": h.get("x-real-ip"),
+            "peer": request.client.host if request.client else None,
+        }
+
     @app.get("/api/meta", response_model=MetaResponse)
     def meta():
         m = dict(engine().meta)
