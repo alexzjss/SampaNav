@@ -28,8 +28,9 @@ O frontend na Vercel é só HTML, CSS e JS. As rotas vêm da API, que roda no Re
 
 ## 2. Apontar o frontend para a API (obrigatório)
 
-Hoje `frontend/config.js` está com `apiBase: ''`. Com esse valor, o site chama `/api` no
-próprio domínio da Vercel, onde não há API, e fica preso em "Acordando o servidor".
+Feito: `frontend/config.js` aponta para `https://sampanav-api.onrender.com`. Com
+`apiBase` vazio, o site chamaria `/api` no próprio domínio da Vercel, onde não há API, e
+ficaria preso em "Acordando o servidor". Se a URL da API mudar, repita:
 
 1. Edite `frontend/config.js`:
 
