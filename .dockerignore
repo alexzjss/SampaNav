@@ -9,3 +9,4 @@ data/dist
 .ruff_cache
 docs
 node_modules
+tools

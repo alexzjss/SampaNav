@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2026-10-29
+
+### Adicionado
+
+- README com capturas reais, GIF da navegação, diagrama da arquitetura e números.
+- `tools/screenshots`: regera as capturas com o backend e os dados reais.
+- Aviso "Nova versão disponível" quando o service worker atualiza.
+- Mensagens amigáveis para 429, erros 5xx e tempo esgotado.
+
+### Corrigido
+
+- `NaN` no corpo de `/api/routes` dava 500 (agora 422).
+- `X-Forwarded-For` aceito só quando é um IP válido.
+- Falha na carga dos grafos em segundo plano ficava como "loading" para sempre.
+- `996 m` aparecia como "1000 m" nas instruções.
+- Corridas no frontend: resposta antiga sobrescrevendo a nova ao trocar modo ou pontos.
+- Rotas escondidas atrás do painel no celular ao enquadrar o mapa.
+- Marcador do usuário sem papel acessível (axe agora sem violações).
+
+### Alterado
+
+- Memória da API com os três modos de ~415 para ~330 MB (parquet de risco lido sem o
+  pool do Arrow).
+- Service worker network-first para HTML, JS e CSS (`sampanav-shell-v3`).
+
 ## [1.2.0] - 2026-10-29
 
 ### Adicionado
