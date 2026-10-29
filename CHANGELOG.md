@@ -5,6 +5,14 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.3] - 2026-10-30
+
+### Documentação
+
+- Licença do GeoSampa confirmada: CC BY-SA 4.0. `docs/LICENCAS-DADOS.md` e o README
+  passam a citá-la, e as notas das Releases de dados trazem as atribuições do OpenStreetMap
+  (ODbL) e do GeoSampa, com a parte derivada da iluminação sob a mesma licença.
+
 ## [1.4.2] - 2026-10-29
 
 ### Corrigido

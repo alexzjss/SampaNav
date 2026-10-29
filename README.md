@@ -137,7 +137,8 @@ Leia antes de usar ou apresentar os resultados.
 - **Photon (komoot)** para geocodificação de endereços e geocodificação reversa,
   restrita à bbox de São Paulo.
 - **OpenFreeMap** para os tiles do mapa base.
-- **GeoSampa (Prefeitura de SP)**: pontos de iluminação pública, usados no ajuste noturno.
+- **GeoSampa (Prefeitura de SP)**: pontos de iluminação pública, usados no ajuste noturno
+  ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)).
 - **dadoscrimesp.com.br**: referência complementar com dados agregados por
   delegacia. Serve como contexto e **não é usado no roteamento**.
 
