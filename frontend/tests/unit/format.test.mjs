@@ -176,3 +176,18 @@ test('httpErrorMessage: 400 usa o detalhe textual; 422/404 genéricos', () => {
   assert.equal(f.httpErrorMessage(422, [{ loc: [] }]), 'Requisição inválida. Confira os pontos escolhidos.');
   assert.equal(f.httpErrorMessage(404, 'Not Found'), 'Algo deu errado. Tente novamente.');
 });
+
+test('LINES: perfis viram linhas numeradas, com cores iguais às de base.css', async () => {
+  const { readFileSync } = await import('node:fs');
+  assert.deepEqual(Object.keys(f.LINES), ['rapida', 'equilibrada', 'segura']);
+  assert.deepEqual(Object.values(f.LINES).map((l) => l.num), [1, 2, 3]);
+  assert.equal(f.lineOf('equilibrada').name, 'Lilás');
+  assert.equal(f.lineOf('toString'), null);
+  assert.equal(f.lineOf('outra'), null);
+  const css = readFileSync(new URL('../../css/base.css', import.meta.url), 'utf8');
+  const [light, dark] = css.split('prefers-color-scheme: dark');
+  for (const [id, l] of Object.entries(f.LINES)) {
+    assert.ok(light.toLowerCase().includes(`--line-${id}: ${l.color.toLowerCase()}`), `${id} claro`);
+    assert.ok(dark.toLowerCase().includes(`--line-${id}: ${l.dark.toLowerCase()}`), `${id} escuro`);
+  }
+});

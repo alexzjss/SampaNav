@@ -1,13 +1,15 @@
 :root {
-  --bg: #f6f7f9;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface-2: #eef0f4;
-  --text: #1b1f27;
-  --text-muted: #5b6472;
-  --border: #d9dde5;
-  --accent: #1a5fd0;
+  --surface-2: #f4f5f7;
+  --text: #111111;
+  --text-muted: #545861;
+  --border: #dde0e6;
+  --accent: #0455a1; /* Linha 1-Azul: links, interruptores, ícones */
   --accent-contrast: #ffffff;
-  --focus: #1a5fd0;
+  --btn-bg: #111111; --btn-fg: #ffffff; /* ação primária: pílula preta */
+  --focus: #0455a1;
+  --brand: #0455a1;
   --error-bg: #fdecec;
   --error-text: #8c1d1d;
   --shadow: 0 2px 12px rgba(20, 28, 45, .14);
@@ -24,21 +26,29 @@
   --badge-alto-bg: #fde0c8;     --badge-alto-fg: #7a2f00;
   --badge-muito-bg: #f9d3d5;    --badge-muito-fg: #7a0f16;
 
+  /* perfis = linhas do Metrô (não confundir com a escala --risk-*); espelhado em LINES (js/format.js) */
+  --line-rapida: #0455a1; --line-equilibrada: #6b3fa0; --line-segura: #00707a;
+  --line-fg: #ffffff; --line-tint: 7%;
+
   --radius: 12px;
   --gutter: 16px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12151b;
-    --surface: #1b2029;
-    --surface-2: #262c38;
-    --text: #e8ebf1;
-    --text-muted: #9aa3b2;
-    --border: #343b49;
-    --accent: #6ea0ff;
-    --accent-contrast: #0b1220;
-    --focus: #8fb4ff;
+    --bg: #0f1115;
+    --surface: #17191e;
+    --surface-2: #1f2229;
+    --text: #f1f2f4;
+    --text-muted: #a4a9b3;
+    --border: #343841;
+    --accent: #6fa8f0;
+    --accent-contrast: #0b0d10;
+    --btn-bg: #f4f5f7; --btn-fg: #111111;
+    --focus: #7db4f5;
+    --brand: #1f6fcb;
+    --line-rapida: #6aa8f0; --line-equilibrada: #b79ce6; --line-segura: #3fb6c0;
+    --line-fg: #0b0d10; --line-tint: 12%;
     --error-bg: #3a1c1f;
     --error-text: #ffb4b4;
     --shadow: 0 2px 12px rgba(0, 0, 0, .5);
@@ -55,7 +65,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Helvetica Neue", Helvetica, Inter, Arial, system-ui, sans-serif;
   font-size: 15px; line-height: 1.4;
   background: var(--bg); color: var(--text);
   overflow: hidden; /* app de tela cheia: só o painel rola */

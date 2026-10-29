@@ -60,6 +60,15 @@ pelo risco, e a camada de calor mostra o risco por região em cada período do d
 grafo, então é mais simples que os tiles do OpenFreeMap usados no app. Para regerar:
 [`tools/screenshots`](tools/screenshots/README.md).</sub>
 
+## Identidade visual
+
+A interface usa a linguagem da sinalização do Metrô de São Paulo: cada perfil de rota é
+uma linha numerada, e o passo a passo aparece como uma sequência de estações. As cores
+das linhas nunca representam risco; o risco segue a escala própria, do verde ao vermelho.
+Detalhes em [`docs/IDENTIDADE.md`](docs/IDENTIDADE.md).
+
+<img src="docs/img/brand/brand-sheet.png" alt="Folha da marca: ícone em vários tamanhos, favicon, marca SampaNav, as três linhas (1 Azul Rápida, 2 Lilás Equilibrada, 3 Turquesa Segura) e a paleta" width="900">
+
 ## Funcionalidades
 
 **Rotas**
