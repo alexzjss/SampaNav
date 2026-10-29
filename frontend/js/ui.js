@@ -1,5 +1,4 @@
-import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, MSG_RATE, levelClass, levelHint, periodRows, fmtExposure, LEVEL_LABELS, LEVEL_NOTE } from './format.js';
-import { maneuverIcon } from './icons.js';
+import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, MSG_RATE, levelClass, levelHint, periodRows, fmtExposure, LEVEL_LABELS, LEVEL_NOTE, lineOf } from './format.js';
 import { loadHistory, clearHistory } from './history.js';
 
 const $ = (id) => document.getElementById(id);
@@ -182,12 +181,13 @@ export function setupUi(h) {
       routes.forEach((r) => {
         const li = document.createElement('li');
         const cats = topCategories(r.categories);
-        const sel = r.id === selectedId;
+        const sel = r.id === selectedId, ln = lineOf(r.id);
+        if (ln) li.dataset.line = r.id;
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'card'; b.dataset.id = r.id;
         b.setAttribute('aria-pressed', String(sel));
         b.innerHTML = `
-          <div class="card-top"><span class="card-label">${esc(r.label)}</span>
+          <div class="card-top"><span class="card-line">${ln ? `<span class="line-num" aria-hidden="true">${ln.num}</span><span class="visually-hidden">Linha ${ln.num}: </span>` : ''}<span class="card-label">${esc(r.label)}</span></span>
             <span class="badge ${levelClass(r.risk_level)}" title="${esc(levelHint(r.risk_level))}">${esc((LEVEL_LABELS[r.risk_level] || r.risk_level))}</span></div>
           <p class="card-metrics">${fmtDuration(r.duration_s)}<small>${fmtKm(r.distance_m)}</small></p>
           <p class="card-vs">${esc(vsTextMinutes(r, fastest))}</p>
@@ -239,7 +239,6 @@ export function setupUi(h) {
       </div>${periodBlock(r, period)}${steps.length ? `<details class="steps"${stepsOpen ? ' open' : ''}>
         <summary>Passo a passo (${steps.length})</summary>
         <ol class="steps-list">${steps.map((s, i) => `<li><button type="button" class="step" data-i="${i}">
-          <span class="step-icon">${maneuverIcon(s.maneuver, 22)}</span>
           <span class="step-text">${esc(s.instruction)}</span>
           <span class="step-dist">${s.distance_m > 0 ? fmtMeters(s.distance_m) : ''}</span></button></li>`).join('')}</ol>
       </details>` : ''}`;

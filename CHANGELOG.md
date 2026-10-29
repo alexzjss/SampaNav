@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] - 2026-10-29
+
+### Alterado
+
+- Nova identidade visual inspirada na sinalização do Metrô de SP: ícone com rota a 45°
+  e estações, marca "S" na Linha 1 Azul, perfis como linhas numeradas (1 Rápida · Azul,
+  2 Equilibrada · Lilás, 3 Segura · Turquesa) e passo a passo desenhado como estações.
+- Botões principais em pílula preta; tipografia de sistema estilo Helvetica.
+- Frontend aponta para a API no Render (`sampanav-api.onrender.com`), com mesma origem
+  em `localhost`.
+
+### Adicionado
+
+- `docs/GUIA-POS-DEPLOY.md` e `docs/IDENTIDADE.md`, com a folha da marca em
+  `docs/img/brand/`.
+
 ## [1.3.0] - 2026-10-29
 
 ### Adicionado

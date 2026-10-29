@@ -1,13 +1,15 @@
 :root {
-  --bg: #f5f4f0;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface-2: #ecebe6;
-  --text: #15181d;
-  --text-muted: #5a5f69;
-  --border: #d8d6cf;
-  --accent: #0455a1; /* azul das placas de rua / Metrô Linha 1-Azul */
+  --surface-2: #f4f5f7;
+  --text: #111111;
+  --text-muted: #545861;
+  --border: #dde0e6;
+  --accent: #0455a1; /* Linha 1-Azul: links, interruptores, ícones */
   --accent-contrast: #ffffff;
+  --btn-bg: #111111; --btn-fg: #ffffff; /* ação primária: pílula preta */
   --focus: #0455a1;
+  --brand: #0455a1;
   --error-bg: #fdecec;
   --error-text: #8c1d1d;
   --shadow: 0 2px 12px rgba(20, 28, 45, .14);
@@ -24,12 +26,9 @@
   --badge-alto-bg: #fde0c8;     --badge-alto-fg: #7a2f00;
   --badge-muito-bg: #f9d3d5;    --badge-muito-fg: #7a0f16;
 
-  /* identidade: piso paulista + placa de rua (não confundir com a escala --risk-*) */
-  --ink: #111111;
-  --paper: #f5f3ee;
-  --sign-bg: #0455a1;
-  --sign-fg: #ffffff;
-  --piso-strip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%23F5F3EE'/%3E%3Cpolygon points='-2,-2 -1,-2 0,-1 1,-1 0,0 -1,0 -2,-1 -3,-1' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='2,-2 3,-2 4,-1 5,-1 4,0 3,0 2,-1 1,-1' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='0,0 1,0 2,1 3,1 2,2 1,2 0,1 -1,1' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='4,0 5,0 6,1 7,1 6,2 5,2 4,1 3,1' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='-2,2 -1,2 0,3 1,3 0,4 -1,4 -2,3 -3,3' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='2,2 3,2 4,3 5,3 4,4 3,4 2,3 1,3' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='0,4 1,4 2,5 3,5 2,6 1,6 0,5 -1,5' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='4,4 5,4 6,5 7,5 6,6 5,6 4,5 3,5' fill='%23111111' stroke='%23111111' stroke-width='0.02' stroke-linejoin='miter'/%3E%3C/svg%3E");
+  /* perfis = linhas do Metrô (não confundir com a escala --risk-*); espelhado em LINES (js/format.js) */
+  --line-rapida: #0455a1; --line-equilibrada: #6b3fa0; --line-segura: #00707a;
+  --line-fg: #ffffff; --line-tint: 7%;
 
   --radius: 12px;
   --gutter: 16px;
@@ -37,15 +36,19 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12151b;
-    --surface: #1b2029;
-    --surface-2: #262c38;
-    --text: #e8ebf1;
-    --text-muted: #9aa3b2;
-    --border: #343b49;
+    --bg: #0f1115;
+    --surface: #17191e;
+    --surface-2: #1f2229;
+    --text: #f1f2f4;
+    --text-muted: #a4a9b3;
+    --border: #343841;
     --accent: #6fa8f0;
-    --accent-contrast: #0b1220;
-    --focus: #8fb8f5;
+    --accent-contrast: #0b0d10;
+    --btn-bg: #f4f5f7; --btn-fg: #111111;
+    --focus: #7db4f5;
+    --brand: #1f6fcb;
+    --line-rapida: #6aa8f0; --line-equilibrada: #b79ce6; --line-segura: #3fb6c0;
+    --line-fg: #0b0d10; --line-tint: 12%;
     --error-bg: #3a1c1f;
     --error-text: #ffb4b4;
     --shadow: 0 2px 12px rgba(0, 0, 0, .5);
@@ -56,14 +59,13 @@
     --badge-moderado-bg: #413511; --badge-moderado-fg: #f3d977;
     --badge-alto-bg: #47260f;     --badge-alto-fg: #f8b886;
     --badge-muito-bg: #4a1a1e;    --badge-muito-fg: #f6a3a8;
-    --piso-strip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%23d9d6cc'/%3E%3Cpolygon points='-2,-2 -1,-2 0,-1 1,-1 0,0 -1,0 -2,-1 -3,-1' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='2,-2 3,-2 4,-1 5,-1 4,0 3,0 2,-1 1,-1' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='0,0 1,0 2,1 3,1 2,2 1,2 0,1 -1,1' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='4,0 5,0 6,1 7,1 6,2 5,2 4,1 3,1' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='-2,2 -1,2 0,3 1,3 0,4 -1,4 -2,3 -3,3' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='2,2 3,2 4,3 5,3 4,4 3,4 2,3 1,3' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='0,4 1,4 2,5 3,5 2,6 1,6 0,5 -1,5' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3Cpolygon points='4,4 5,4 6,5 7,5 6,6 5,6 4,5 3,5' fill='%2307090c' stroke='%2307090c' stroke-width='0.02' stroke-linejoin='miter'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
 }
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: "Helvetica Neue", Helvetica, Inter, Arial, system-ui, sans-serif;
   font-size: 15px; line-height: 1.4;
   background: var(--bg); color: var(--text);
   overflow: hidden; /* app de tela cheia: só o painel rola */

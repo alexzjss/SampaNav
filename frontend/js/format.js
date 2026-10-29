@@ -17,6 +17,17 @@ export const LEVEL_HINTS = {
 export const LEVEL_NOTE = 'Níveis comparam o trajeto com as ruas da cidade no mesmo período: moderado = acima da metade das ruas; alto = acima de 75%; muito alto = acima de 90%.';
 export const levelHint = (level) => LEVEL_HINTS[level] || LEVEL_NOTE;
 
+/**
+ * Perfis como linhas do Metrô: número, nome e cor (claro/escuro). Espelha --line-* em css/base.css;
+ * não tem relação com a escala de risco (--risk-*).
+ */
+export const LINES = {
+  rapida: { num: 1, name: 'Azul', color: '#0455A1', dark: '#6AA8F0' },
+  equilibrada: { num: 2, name: 'Lilás', color: '#6B3FA0', dark: '#B79CE6' },
+  segura: { num: 3, name: 'Turquesa', color: '#00707A', dark: '#3FB6C0' },
+};
+export const lineOf = (id) => (Object.hasOwn(LINES, id) ? LINES[id] : null);
+
 export function fmtDuration(s) {
   const min = Math.max(1, Math.round(s / 60));
   if (min < 60) return `${min} min`;
