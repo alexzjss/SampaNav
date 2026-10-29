@@ -88,6 +88,14 @@ try {
   await page.click('#via-remove');
   check(await page.locator('#route-cards .card').count() === 0, 'remover parada limpa as rotas');
 
+  // corrida: mudar o modo durante o cálculo descarta a resposta tardia e reabilita o botão
+  await page.click('#calc');
+  await page.check('input[name=mode][value=walk]', { force: true });
+  check(await page.locator('#calc').isEnabled(), 'mudar modo durante o cálculo reabilita o botão');
+  await page.waitForTimeout(900);
+  check(await page.locator('#route-cards .card').count() === 0, 'resposta tardia descartada após mudar o modo');
+  check(await page.locator('#update-banner').isHidden(), 'aviso de nova versão oculto por padrão');
+
   check(errors.length === 0, `sem erros no console${errors.length ? ':\n  ' + errors.join('\n  ') : ''}`);
 } catch (e) {
   console.error(`FAIL ${e.message.split('\n')[0]}`);

@@ -3,13 +3,15 @@ import { createMap, HEAT_MIN_ZOOM } from './map.js';
 import { setupUi } from './ui.js';
 import { setupNavBanner } from './navui.js';
 import { createNavigator, buildPath, project } from './nav.js';
-import { currentPeriod } from './format.js';
+import { currentPeriod, MSG_GENERIC } from './format.js';
 import { downloadGpx } from './gpx.js';
 import { addHistory } from './history.js';
 import { readUrlState, writeUrlState, buildUrl } from './urlstate.js';
 
 const state = { origin: null, dest: null, via: null, originLabel: '', destLabel: '', viaLabel: '', period: null, routes: [], selected: null, heat: false, serverReady: false };
-let heatCtl = null, heatSeq = 0;
+let heatCtl = null, heatSeq = 0, calcCtl = null, calcSeq = 0;
+/** Mensagem segura para exibir: só erros já amigáveis (api.js/mock) passam; o resto vira texto genérico. */
+const errMsg = (e, fallback = MSG_GENERIC) => (e && e.friendly && e.message) || fallback;
 
 const ui = setupUi({
   geocode: (q) => geocode(q),
@@ -19,8 +21,10 @@ const ui = setupUi({
   onGpx(route) { downloadGpx(route, { mode: ui.getMode(), period: state.period || ui.getPeriod() }); },
   onSwap() {
     const o = state.origin, d = state.dest;
-    const ol = document.getElementById('origin-input').value, dl = document.getElementById('dest-input').value;
+    const ol = ui.getInput('origin'), dl = ui.getInput('dest');
     setPoint('origin', d, dl); setPoint('dest', o, ol);
+    if (d && dl === coordLabel(d)) resolveLabel('origin', d);
+    if (o && ol === coordLabel(o)) resolveLabel('dest', o);
   },
   onCalc: () => calculate(),
   onSettings() { clearRoutes(); refreshHeat(); },
@@ -36,7 +40,7 @@ const ui = setupUi({
   onStep(step) { if (step?.location) mapApi.showStep(step.location); },
   onShare: share,
   onStartNav: startNav,
-  onServerRetry: () => connect(),
+  onServerRetry() { ui.serverBanner('waiting'); connect(); },
 });
 
 const mapApi = createMap({
@@ -75,7 +79,7 @@ function setPoint(kind, p, label, updateInput = true) {
   mapApi.setPoint(kind, p);
   if (updateInput && label != null) ui.setInput(kind, label);
   ui.refreshRecents();
-  if (updateInput || p === null) { /* mudança de ponto invalida rotas */ if (state.routes.length) clearRoutes(); }
+  if (updateInput || p === null) { /* mudança de ponto invalida rotas e cálculo em andamento */ cancelCalc(); if (state.routes.length) clearRoutes(); }
   ui.setHint(!state.origin ? 'Dica: clique no mapa para definir a origem. Arraste os marcadores para ajustar.'
     : !state.dest ? 'Agora clique no mapa para definir o destino.' : 'Pronto. Toque em "Calcular rotas".');
 }
@@ -97,7 +101,15 @@ async function resolveLabel(kind, p) {
   } catch { /* mantém coordenadas */ }
 }
 
+/** Invalida um cálculo em andamento (parâmetros mudaram): a resposta tardia é descartada. */
+function cancelCalc() {
+  if (!calcCtl) return;
+  calcCtl.abort(); calcCtl = null; calcSeq++;
+  ui.setBusy(false); ui.setStatus('');
+}
+
 function clearRoutes() {
+  cancelCalc();
   if (nav.isActive()) nav.stop();
   state.routes = []; state.selected = null;
   mapApi.clearRoutes(); mapApi.clearStep(); ui.renderCards([], null);
@@ -115,6 +127,7 @@ function shareState() {
 }
 
 function select(id) {
+  if (nav.isActive() || id === state.selected || !state.routes.some((r) => r.id === id)) return;
   state.selected = id; mapApi.select(id); mapApi.clearStep(); ui.markSelected(id); syncUrl();
 }
 
@@ -129,8 +142,8 @@ async function share() {
   catch { window.prompt('Copie o link:', url); }
 }
 
-async function fetchRoutes(origin, via) {
-  return postRoutes({ origin, destination: state.dest, via: via === undefined ? state.via : via, mode: ui.getMode(), period: ui.getPeriod() });
+async function fetchRoutes(origin, via, signal) {
+  return postRoutes({ origin, destination: state.dest, via: via === undefined ? state.via : via, mode: ui.getMode(), period: ui.getPeriod() }, signal);
 }
 
 async function calculate(preferId = null) {
@@ -138,9 +151,13 @@ async function calculate(preferId = null) {
   if (!state.serverReady) { ui.setError('O servidor ainda está acordando. Aguarde um instante.'); return; }
   if (!state.origin || !state.dest) { ui.setError('Defina a origem e o destino (digite um endereço ou clique no mapa).'); return; }
   if (nav.isActive()) nav.stop();
+  calcCtl?.abort(); // o último pedido vence
+  const ctl = calcCtl = new AbortController(), my = ++calcSeq;
   ui.setBusy(true); ui.setStatus('Calculando rotas…');
+  const stale = () => my !== calcSeq;
   try {
-    const res = await fetchRoutes(state.origin);
+    const res = await fetchRoutes(state.origin, undefined, ctl.signal);
+    if (stale()) return;
     state.routes = res.routes || [];
     state.period = res.period || null;
     if (!state.routes.length) { ui.setError('Nenhuma rota encontrada para esses pontos.'); ui.setStatus(''); return; }
@@ -153,15 +170,16 @@ async function calculate(preferId = null) {
     ui.setStatus(state.routes.length === 1
       ? 'Nenhum desvio reduz a exposição de forma relevante neste trajeto; mostrando a rota mais rápida.'
       : `${state.routes.length} rotas encontradas.`);
-    ui.collapseSheet(false);
+    ui.collapseSheet(false); ui.revealRoutes();
     addHistory({ o: { ...state.origin, label: state.originLabel || coordLabel(state.origin) },
       v: state.via && { ...state.via, label: state.viaLabel || coordLabel(state.via) },
       d: { ...state.dest, label: state.destLabel || coordLabel(state.dest) }, mode: ui.getMode(), period: ui.getPeriod() });
     ui.refreshRecents();
     syncUrl();
   } catch (e) {
-    ui.setStatus(''); ui.setError(e.message || 'Erro ao calcular rotas.');
-  } finally { ui.setBusy(false); }
+    if (stale() || e.name === 'AbortError') return;
+    ui.setStatus(''); ui.setError(errMsg(e, 'Erro ao calcular rotas.'));
+  } finally { if (!stale()) { calcCtl = null; ui.setBusy(false); } }
 }
 
 // ---- Navegação ----
@@ -188,8 +206,9 @@ async function recalcFrom(pos) {
   // mantém a parada só se ainda não foi passada (progresso < geometry_index do passo "waypoint")
   const via = state.via && !viaPassed(pos) ? state.via : null;
   const res = await fetchRoutes(pos, via);
+  if (!nav.isActive()) return null; // navegação encerrada durante o pedido: descarta
   const routes = res.routes || [];
-  if (!routes.length) throw new Error('Nenhuma rota encontrada a partir daqui.');
+  if (!routes.length) throw Object.assign(new Error('Nenhuma rota encontrada a partir daqui.'), { friendly: true });
   state.routes = routes; state.period = res.period || state.period;
   if (state.via && !via) { state.via = null; state.viaLabel = ''; mapApi.setPoint('via', null); ui.showVia(false); }
   const pick = routes.find((r) => r.id === keepId) || routes.find((r) => r.id === 'equilibrada') || routes[0];
@@ -222,7 +241,7 @@ async function refreshHeat() {
     ui.toast('map-loading', false);
   } catch (e) {
     if (e.name === 'AbortError' || my !== heatSeq) return;
-    ui.toast('map-loading', false); ui.setError(e.message);
+    ui.toast('map-loading', false); ui.snack(errMsg(e, 'Não foi possível carregar o mapa de risco.'));
   }
 }
 

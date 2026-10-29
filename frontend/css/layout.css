@@ -4,7 +4,7 @@
   background: var(--surface); border-right: 1px solid var(--border);
   z-index: 5; min-height: 0;
 }
-.panel-head { flex: none; padding: 16px var(--gutter) 4px; }
+.panel-head { flex: none; padding: 16px var(--gutter) 10px; border-bottom: 1px solid var(--border); }
 .brand { margin: 0; font-size: 22px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
 .brand-logo { width: 28px; height: 28px; flex: none; }
 .tagline { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
@@ -32,7 +32,8 @@
     max-height: 62dvh; border-right: 0; border-top: 1px solid var(--border);
     border-radius: 18px 18px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,.18);
   }
-  .panel.collapsed .panel-body, .panel.collapsed .tagline { display: none; }
+  .panel.collapsed .panel-body, .panel.collapsed .tagline, .panel.collapsed .disclaimer { display: none; }
+  .panel.collapsed .panel-head { border-bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
   .panel.collapsed { max-height: none; }
   .sheet-handle {
     display: flex; justify-content: center; align-items: center; width: 100%;

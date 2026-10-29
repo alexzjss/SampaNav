@@ -9,6 +9,15 @@ function cssVar(name) { return getComputedStyle(document.documentElement).getPro
 const heatColor = () => ['interpolate', ['linear'], ['get', 'risk'],
   0.05, cssVar('--risk-0'), 0.35, cssVar('--risk-1'), 0.65, cssVar('--risk-2'), 1, cssVar('--risk-3')];
 
+/** Altura (px) do painel inferior no celular, para não esconder o mapa atrás dele; 0 no desktop. */
+function sheetPad() {
+  if (innerWidth >= 768) return 0;
+  const h = document.getElementById('panel')?.offsetHeight || innerHeight * 0.55;
+  return Math.round(Math.min(h + 16, innerHeight * 0.7));
+}
+/** Deslocamento do centro para a área visível acima do painel (offset é transitório; padding persistiria e quebraria fitBounds). */
+const sheetOffset = () => [0, -Math.round(sheetPad() / 2)];
+
 export function createMap(handlers) {
   const map = new maplibregl.Map({
     container: 'map',
@@ -86,10 +95,8 @@ export function createMap(handlers) {
     routes.forEach((r) => r.geometry.coordinates.forEach((c) => b.extend(c)));
     if (markers.via) b.extend(markers.via.getLngLat());
     if (b.isEmpty()) return;
-    const mobile = innerWidth < 768;
     map.fitBounds(b, { duration: 600, maxZoom: 16,
-      padding: mobile ? { top: 40, left: 30, right: 30, bottom: Math.round(innerHeight * 0.55) }
-        : { top: 60, bottom: 60, left: 60, right: 60 } });
+      padding: innerWidth < 768 ? { top: 56, left: 30, right: 56, bottom: sheetPad() } : { top: 60, bottom: 60, left: 60, right: 60 } });
   }
 
   return {
@@ -133,6 +140,7 @@ export function createMap(handlers) {
       if (!userMarker) {
         const el = document.createElement('div');
         el.className = 'user-dot';
+        el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'Sua posição');
         el.innerHTML = '<span class="user-heading"></span><span class="user-core"></span>';
         userMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat([p.lon, p.lat]).addTo(map);
       }
@@ -149,9 +157,9 @@ export function createMap(handlers) {
       const el = document.createElement('div');
       el.className = 'step-dot';
       stepMarker = new maplibregl.Marker({ element: el }).setLngLat(loc).addTo(map);
-      const sheet = innerWidth < 768 && !document.body.classList.contains('navigating');
+      const sheet = !document.body.classList.contains('navigating');
       map.flyTo({ center: loc, zoom: Math.max(map.getZoom(), 17), essential: true,
-        padding: { top: 0, left: 0, right: 0, bottom: sheet ? Math.round(innerHeight * 0.55) : 0 } });
+        offset: sheet ? sheetOffset() : [0, 0] });
     },
     clearStep() { stepMarker?.remove(); stepMarker = null; },
     fitBounds(coords) {
@@ -159,6 +167,6 @@ export function createMap(handlers) {
       coords.forEach((c) => b.extend(c));
       if (!b.isEmpty()) map.fitBounds(b, { padding: 80, maxZoom: 17, duration: 600 });
     },
-    flyTo(p) { map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 14) }); },
+    flyTo(p) { map.easeTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 14), offset: sheetOffset() }); },
   };
 }

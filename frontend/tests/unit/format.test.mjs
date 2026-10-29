@@ -161,3 +161,18 @@ test('fmtExposure', () => {
   assert.equal(f.fmtExposure(1.25), '1,3');
   assert.equal(f.fmtExposure(null), '–');
 });
+
+test('httpErrorMessage: 429 amigável, 5xx sem texto bruto', () => {
+  assert.equal(f.httpErrorMessage(429, 'Too Many Requests'), 'Muitas requisições; aguarde um instante.');
+  assert.equal(f.httpErrorMessage(502, 'HTTPSConnectionPool(host=photon...) timed out'), 'O servidor está indisponível no momento. Tente novamente em instantes.');
+  assert.equal(f.httpErrorMessage(500, null), 'O servidor está indisponível no momento. Tente novamente em instantes.');
+  assert.equal(f.httpErrorMessage(503, 'Servidor iniciando; tente novamente em instantes.'), 'Servidor iniciando; tente novamente em instantes.');
+  assert.equal(f.httpErrorMessage(503, null), 'Servidor iniciando; tente novamente em instantes.');
+});
+
+test('httpErrorMessage: 400 usa o detalhe textual; 422/404 genéricos', () => {
+  assert.equal(f.httpErrorMessage(400, 'Ponto fora da região de São Paulo.'), 'Ponto fora da região de São Paulo.');
+  assert.equal(f.httpErrorMessage(400, [{ loc: [] }]), 'Requisição inválida. Confira os pontos escolhidos.');
+  assert.equal(f.httpErrorMessage(422, [{ loc: [] }]), 'Requisição inválida. Confira os pontos escolhidos.');
+  assert.equal(f.httpErrorMessage(404, 'Not Found'), 'Algo deu errado. Tente novamente.');
+});

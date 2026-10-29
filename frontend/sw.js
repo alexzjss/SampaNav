@@ -1,5 +1,5 @@
 // Service worker: app shell em cache. Nunca guarda /api/, config.js nem requisições de outras origens.
-const CACHE = 'sampanav-shell-v2';
+const CACHE = 'sampanav-shell-v3';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/base.css', 'css/layout.css', 'css/components.css', 'css/about.css',
@@ -36,10 +36,10 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(req).then((r) => put(req, r)).catch(() => caches.match(req).then((m) => m || caches.match('index.html')).then((m) => m || Response.error())));
     return;
   }
-  // cache primeiro (rápido/offline) e atualiza em segundo plano, para não ficar preso a versões antigas
-  e.respondWith(caches.match(req).then((m) => {
-    const net = fetch(req).then((r) => put(req, r)).catch(() => null);
-    if (m) { e.waitUntil(net); return m; }
-    return net.then((r) => r || Response.error());
-  }));
+  // rede primeiro (versões consistentes entre index/JS/CSS) com cache de reserva offline; imagens: cache primeiro
+  if (/\.(png|svg|webp|ico)$/.test(url.pathname)) {
+    e.respondWith(caches.match(req).then((m) => m || fetch(req).then((r) => put(req, r)).catch(() => Response.error())));
+    return;
+  }
+  e.respondWith(fetch(req).then((r) => put(req, r)).catch(() => caches.match(req).then((m) => m || Response.error())));
 });

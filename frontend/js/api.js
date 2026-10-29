@@ -1,3 +1,4 @@
+import { httpErrorMessage } from './format.js';
 const PARAMS = new URLSearchParams(location.search);
 const MOCK = PARAMS.get('mock') === '1';
 export const isMock = MOCK;
@@ -7,23 +8,31 @@ let mockMod;
 async function mock() { return (mockMod ??= await import('./mock.js')); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** fetch com 1 retry em erro de rede / 502 / 503 (servidor acordando ou reiniciando). */
-async function http(path, opts, retries = 1) {
+/** Erro com mensagem já amigável (seguro para exibir). */
+function friendly(msg, status) { const e = new Error(msg); e.friendly = true; e.status = status; return e; }
+const TIMEOUT_MS = 60000;
+
+/** fetch com 1 retry em erro de rede / 502 / 503 (servidor acordando ou reiniciando) e timeout. */
+async function http(path, opts = {}, retries = 1) {
+  const outer = opts.signal;
   for (let attempt = 0; ; attempt++) {
-    let res;
-    try { res = await fetch(BASE + path, opts); }
-    catch (e) {
-      if (e.name === 'AbortError') throw e;
+    const ctl = new AbortController();
+    let timedOut = false;
+    const onAbort = () => ctl.abort();
+    outer?.addEventListener('abort', onAbort);
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, TIMEOUT_MS);
+    let res, body = null;
+    try {
+      res = await fetch(BASE + path, { ...opts, signal: ctl.signal });
+      if (!((res.status === 502 || res.status === 503) && attempt < retries)) { try { body = await res.json(); } catch { /* ignora */ } }
+    } catch (e) {
+      if (outer?.aborted) throw e;
+      if (timedOut) throw friendly('O servidor demorou para responder. Tente novamente.', 0);
       if (attempt < retries) { await sleep(1500); continue; }
-      throw new Error('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.');
-    }
+      throw friendly('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.', 0);
+    } finally { clearTimeout(timer); outer?.removeEventListener('abort', onAbort); }
     if ((res.status === 502 || res.status === 503) && attempt < retries) { await sleep(1500); continue; }
-    let body = null;
-    try { body = await res.json(); } catch { /* ignora */ }
-    if (!res.ok) {
-      const d = body && body.detail;
-      throw new Error(typeof d === 'string' ? d : Array.isArray(d) ? 'Requisição inválida. Confira os pontos escolhidos.' : `Erro do servidor (${res.status}).`);
-    }
+    if (!res.ok) throw friendly(httpErrorMessage(res.status, body && body.detail), res.status);
     return body;
   }
 }
@@ -66,9 +75,9 @@ export async function geocode(q, signal) {
 export async function reverseGeocode(lat, lon, signal) {
   return MOCK ? (await mock()).reverse(lat, lon) : http(`/api/reverse?lat=${lat}&lon=${lon}`, { signal }, 0);
 }
-export async function postRoutes(payload) {
+export async function postRoutes(payload, signal) {
   return MOCK ? (await mock()).routes(payload) : http('/api/routes', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
   });
 }
 export async function getRisk(bbox, mode, period, signal) {

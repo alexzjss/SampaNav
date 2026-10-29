@@ -1,4 +1,4 @@
-import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, levelClass, levelHint, periodRows, fmtExposure, LEVEL_LABELS, LEVEL_NOTE } from './format.js';
+import { debounce, fmtDuration, fmtKm, fmtDate, fmtMeters, topCategories, vsTextMinutes, MSG_RATE, levelClass, levelHint, periodRows, fmtExposure, LEVEL_LABELS, LEVEL_NOTE } from './format.js';
 import { maneuverIcon } from './icons.js';
 import { loadHistory, clearHistory } from './history.js';
 
@@ -16,7 +16,7 @@ export function setupAutocomplete({ input, list, search, onPick, onType }) {
     if (i >= 0) { input.setAttribute('aria-activedescendant', list.children[i].id); list.children[i].scrollIntoView({ block: 'nearest' }); }
     else input.removeAttribute('aria-activedescendant');
   };
-  const pick = (i) => { const it = items[i]; if (!it) return; input.value = it.label; close(); onPick(it); };
+  const pick = (i) => { const it = items[i]; if (!it) return; seq++; run.cancel(); input.value = it.label; close(); onPick(it); };
   const render = (msg) => {
     list.innerHTML = '';
     if (msg) list.innerHTML = `<li class="empty" role="presentation">${esc(msg)}</li>`;
@@ -35,7 +35,7 @@ export function setupAutocomplete({ input, list, search, onPick, onType }) {
       items = await search(q);
       if (my !== seq) return;
       render(items.length ? '' : 'Nenhum resultado encontrado.');
-    } catch (e) { if (my === seq) { items = []; render('Não foi possível buscar endereços agora.'); } }
+    } catch (e) { if (my === seq) { items = []; render(e && e.status === 429 ? MSG_RATE : 'Não foi possível buscar endereços agora.'); } }
   }, 300);
   input.addEventListener('input', () => {
     onType?.();
@@ -63,7 +63,11 @@ export function setupUi(h) {
   const setError = (t) => { errBox.hidden = !t; errBox.textContent = t || ''; };
   let busy = false, serverReady = true, stepsOpen = false;
   let lastRoutes = [], lastSel = null, lastPeriod = null;
-  const syncCalc = () => { $('calc').disabled = busy || !serverReady; $('calc').textContent = busy ? 'Calculando…' : 'Calcular rotas'; };
+  const syncCalc = () => {
+    const b = $('calc');
+    b.disabled = busy || !serverReady; b.setAttribute('aria-busy', String(busy));
+    b.innerHTML = busy ? '<span class="spinner" aria-hidden="true"></span>Calculando…' : 'Calcular rotas';
+  };
   const setBusy = (b) => { busy = b; syncCalc(); };
   let snackTimer;
   const snack = (t) => {
@@ -110,10 +114,12 @@ export function setupUi(h) {
 
   $('use-location').addEventListener('click', () => {
     if (!navigator.geolocation) { setError('Seu navegador não oferece localização.'); return; }
-    setError(''); setStatus('Obtendo sua localização…');
+    const btn = $('use-location');
+    if (btn.disabled) return;
+    btn.disabled = true; setError(''); setStatus('Obtendo sua localização…');
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setStatus(''); h.onPick('origin', { label: 'Minha localização', lat: pos.coords.latitude, lon: pos.coords.longitude }); },
-      (err) => { setStatus(''); setError(err.code === 1 ? 'Permissão de localização negada. Digite um endereço ou clique no mapa.' : 'Não foi possível obter sua localização.'); },
+      (pos) => { btn.disabled = false; setStatus(''); h.onPick('origin', { label: 'Minha localização', lat: pos.coords.latitude, lon: pos.coords.longitude }); },
+      (err) => { btn.disabled = false; setStatus(''); setError(err.code === 1 ? 'Permissão de localização negada. Digite um endereço ou clique no mapa.' : 'Não foi possível obter sua localização.'); },
       { enableHighAccuracy: true, timeout: 10000 });
   });
   $('swap').addEventListener('click', () => h.onSwap());
@@ -192,6 +198,11 @@ export function setupUi(h) {
         ul.appendChild(li);
       });
       if (focusId) ul.querySelector(`.card[data-id="${CSS.escape(focusId)}"]`)?.focus();
+    },
+    /** Rola o painel até as rotas (no celular elas ficam abaixo do formulário). */
+    revealRoutes() {
+      const body = $('panel-body'), sec = $('routes-section');
+      body.scrollTop += sec.getBoundingClientRect().top - body.getBoundingClientRect().top - 8;
     },
     markSelected(id) { this.renderCards(lastRoutes, id, lastPeriod); },
     highlightStep(i) {
