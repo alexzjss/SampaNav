@@ -186,7 +186,7 @@ def create_app(
         yield
         await geo.close()
 
-    app = FastAPI(title="SampaNav", version="1.4.2", lifespan=lifespan)
+    app = FastAPI(title="SampaNav", version="1.4.3", lifespan=lifespan)
     app.state.limiter = RateLimiter(load_rates(rate_limits))
 
     @app.exception_handler(RequestValidationError)

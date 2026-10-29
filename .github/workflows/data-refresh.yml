@@ -65,7 +65,7 @@ jobs:
         run: |
           PYTHONPATH=. uv run python -m pipeline.package_data
           TAG="data-$(date -u +%Y-%m-%d)"
-          NOTES=$(python3 -c "import json; m=json.load(open('data/processed/risk_meta.json')); print(f\"Ocorrências de {m['date_min']} a {m['date_max']} ({m['n_occurrences']:,} registros). Gerado em {m['generated_at']}.\")")
+          NOTES=$(python3 -c "import json; m=json.load(open('data/processed/risk_meta.json')); print(f\"Ocorrências de {m['date_min']} a {m['date_max']} ({m['n_occurrences']:,} registros). Gerado em {m['generated_at']}.\\n\\nMalha viária derivada do OpenStreetMap: © colaboradores do OpenStreetMap, licença ODbL (https://www.openstreetmap.org/copyright). Iluminação pública: GeoSampa / Prefeitura de São Paulo, licença CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); os pontos em sampanav-inputs.tar.gz e o ajuste noturno derivado deles são distribuídos sob a mesma licença.\")")
           gh release create "$TAG" data/dist/sampanav-data.tar.gz data/dist/sampanav-inputs.tar.gz \
             --title "Dados $TAG" --notes "$NOTES" --latest
 
