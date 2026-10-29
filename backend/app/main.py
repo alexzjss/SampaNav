@@ -180,7 +180,7 @@ def create_app(
         yield
         await geo.close()
 
-    app = FastAPI(title="SampaNav", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="SampaNav", version="1.1.0", lifespan=lifespan)
     app.state.limiter = RateLimiter(load_rates(rate_limits))
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     origins = allowed_origins()

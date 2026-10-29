@@ -16,7 +16,16 @@ filtrado por período do dia (madrugada, manhã, tarde, noite).
 - **Navegação passo a passo**: instruções em português ("Vire à direita na Av. Paulista",
   "Continue pela Rua Augusta por 300 m") no cartão da rota selecionada.
 - **Modo navegação com GPS**: acompanha a posição, destaca o passo atual e mostra a
-  distância até a próxima manobra.
+  distância até a próxima manobra, o tempo restante e a hora prevista de chegada.
+- **Instruções faladas**: as manobras são lidas em português pelo navegador (Web Speech
+  API), com botão para desligar a voz.
+- **Endereço ao clicar no mapa**: pontos definidos por clique ou arraste mostram o
+  endereço (geocodificação reversa) em vez de coordenadas.
+- **Instalável (PWA)**: manifesto, ícones e service worker que guarda a interface em
+  cache; ela abre mesmo enquanto a API acorda. Chamadas à API nunca vão para o cache.
+- **Sobre e limitações**: janela no app com o funcionamento do modelo, as limitações e
+  as fontes de dados. Os níveis de risco dos cartões trazem a explicação de que são
+  relativos às ruas da cidade no mesmo período.
 - **Recalcular ao sair da rota**: após 3 leituras seguidas a mais de 40 m da rota,
   o app oferece recalcular a partir da posição atual.
 - **Compartilhar por link**: origem, destino, modo, período e rota ficam na URL, e
@@ -154,6 +163,7 @@ está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md), seção 5.
 - `GET /api/health`: status do servidor e tamanho dos grafos carregados.
 - `GET /api/meta`: metadados do modelo de risco, perfis e períodos disponíveis.
 - `GET /api/geocode?q=...`: busca de endereços dentro de São Paulo.
+- `GET /api/reverse?lat=...&lon=...`: endereço mais próximo de um ponto (ou `null`).
 - `POST /api/routes`: calcula as rotas entre origem e destino, para um modo e período.
   Cada rota traz `steps`, a lista de manobras para a navegação passo a passo.
 - `GET /api/risk?bbox=...&mode=...&period=...`: células H3 com risco, para a camada de calor.

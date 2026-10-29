@@ -100,3 +100,22 @@ test('project: sem candidato dentro da janela cai no mais próximo', () => {
   assert.equal(r.seg, 0);
   close(r.dist, 0, 0.01);
 });
+
+test('etaInfo: tempo proporcional à distância restante e chegada', () => {
+  const now = new Date('2026-01-01T12:00:00Z');
+  const e = nav.etaInfo({ duration_s: 1200 }, 500, 1000, now);
+  assert.equal(e.remainingS, 600);
+  assert.equal(e.arrival.toISOString(), '2026-01-01T12:10:00.000Z');
+  assert.equal(nav.etaInfo({ duration_s: 1200 }, 2000, 1000, now).remainingS, 1200); // limita ao total
+  assert.equal(nav.etaInfo({ duration_s: 1200 }, -5, 1000, now).remainingS, 0);
+  assert.equal(nav.etaInfo({}, 10, 1000, now), null);
+  assert.equal(nav.etaInfo({ duration_s: 60 }, 10, 0, now), null);
+});
+
+test('turnNowM e shortManeuver', () => {
+  assert.equal(nav.turnNowM({ distance_m: 1000, duration_s: 720 }), 30); // a pé
+  assert.equal(nav.turnNowM({ distance_m: 1000, duration_s: 100 }), 60); // carro
+  assert.equal(nav.turnNowM({}), 40);
+  assert.equal(nav.shortManeuver({ maneuver: 'right', instruction: 'x' }), 'Vire à direita');
+  assert.equal(nav.shortManeuver({ maneuver: 'foo', instruction: 'Siga' }), 'Siga');
+});

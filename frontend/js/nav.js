@@ -1,4 +1,5 @@
 // Modo de navegação: acompanha a posição do usuário sobre a geometria da rota.
+import { fmtMeters } from './format.js';
 const R = 6371008.8;
 const rad = (d) => (d * Math.PI) / 180;
 export const OFF_ROUTE_M = 40, OFF_ROUTE_FIXES = 3, ARRIVE_M = 25;
@@ -12,6 +13,24 @@ export function bearing(aLat, aLon, bLat, bLon) {
   const y = Math.sin(rad(bLon - aLon)) * Math.cos(rad(bLat));
   const x = Math.cos(rad(aLat)) * Math.sin(rad(bLat)) - Math.sin(rad(aLat)) * Math.cos(rad(bLat)) * Math.cos(rad(bLon - aLon));
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * ETA simples: tempo da rota escalado pela fração de distância restante.
+ * Retorna { remainingM, remainingS, arrival: Date } (null sem duração).
+ */
+export function etaInfo(route, remainingM, totalM, now = new Date()) {
+  const dur = route?.duration_s;
+  if (!(dur >= 0) || !(totalM > 0)) return null;
+  const rem = Math.min(Math.max(remainingM, 0), totalM);
+  const remainingS = (dur * rem) / totalM;
+  return { remainingM: rem, remainingS, arrival: new Date(now.getTime() + remainingS * 1000) };
+}
+
+/** Distância (m) do "Vire agora": a pé 30, de carro 60 (pela velocidade média), 40 sem dados. */
+export function turnNowM(route) {
+  const v = route?.duration_s > 0 && route?.distance_m > 0 ? route.distance_m / route.duration_s : 0;
+  return !v ? 40 : v > 4 ? 60 : 30;
 }
 
 /** coords = [[lon,lat],...] -> comprimentos acumulados (m) por vértice. */
@@ -92,10 +111,18 @@ function geoWatch(path, onFix, onError) {
 /**
  * deps: { map (mapApi), ui (navui), recalc(pos) -> Promise<route>, onExit() }
  */
+const lcFirst = (t) => (t ? t[0].toLowerCase() + t.slice(1) : t);
+const MAN = { left: 'Vire à esquerda', right: 'Vire à direita', 'slight-left': 'Siga à esquerda', 'slight-right': 'Siga à direita',
+  'sharp-left': 'Vire acentuadamente à esquerda', 'sharp-right': 'Vire acentuadamente à direita', uturn: 'Faça o retorno', arrive: 'Você chegou' };
+/** Frase curta para o "agora": usa o tipo de manobra, senão a instrução. */
+export function shortManeuver(step) {
+  return MAN[step?.maneuver] || step?.instruction || '';
+}
+
 export function createNavigator({ map, ui, recalc, onExit }) {
   let route = null, path = null, steps = [], stopWatch = null, wake = null;
   let active = false, arrived = false, offCount = 0, lastAlong = 0, lastFix = null, prevFix = null;
-  let following = true, offRoute = false, curStep = -1, announced = '', gotFix = false, busy = false;
+  let following = true, offRoute = false, curStep = -1, announced = '', nowSpoken = false, gotFix = false, busy = false;
 
   async function lock() {
     try {
@@ -134,7 +161,7 @@ export function createNavigator({ map, ui, recalc, onExit }) {
     const pr = project(path, fix.lat, fix.lon, lastAlong);
     if (pr.dist > OFF_ROUTE_M && !(fix.accuracy > 100)) offCount++; else if (pr.dist <= OFF_ROUTE_M) offCount = 0;
     if (offCount >= OFF_ROUTE_FIXES) {
-      if (!offRoute) { offRoute = true; ui.offRoute(true); ui.announce('Você saiu da rota. Recalcular?'); }
+      if (!offRoute) { offRoute = true; ui.offRoute(true); ui.announce('Você saiu da rota. Recalcular?', true); }
       return;
     }
     if (offRoute && pr.dist <= OFF_ROUTE_M) { offRoute = false; ui.offRoute(false); }
@@ -147,20 +174,28 @@ export function createNavigator({ map, ui, recalc, onExit }) {
     const distNext = next ? Math.max(0, path.cum[Math.min(next.geometry_index, path.cum.length - 1)] - pr.along) : 0;
     if (cur !== curStep) { curStep = cur; ui.highlightStep(cur); }
     const key = `${cur}`;
-    ui.update({ step: steps[cur] || null, next, distNext, remaining: Math.max(0, path.total - pr.along), hasSteps: steps.length > 0 });
-    if (key !== announced) { announced = key; ui.announce(next ? next.instruction : 'Siga a rota'); }
+    const remaining = Math.max(0, path.total - pr.along);
+    ui.update({ step: steps[cur] || null, next, distNext, remaining, hasSteps: steps.length > 0,
+      eta: etaInfo(route, remaining, path.total) });
+    if (key !== announced) {
+      announced = key; nowSpoken = false;
+      const t = next ? next.instruction : 'Siga a rota';
+      ui.announce(next && distNext >= 40 ? `Em ${fmtMeters(distNext)}, ${lcFirst(t)}` : t, true);
+    } else if (next && !nowSpoken && distNext < turnNowM(route)) {
+      nowSpoken = true; ui.announce(shortManeuver(next), true);
+    }
   }
 
   function arrive() {
     arrived = true; stopWatch?.(); stopWatch = null;
-    ui.arrived(); ui.announce('Você chegou ao destino');
+    ui.arrived(); ui.announce('Você chegou ao destino', true);
   }
 
   function begin(r) {
     stopWatch?.();
     route = r; path = buildPath(r.geometry.coordinates);
     steps = (r.steps || []).filter((s) => Number.isInteger(s.geometry_index)).sort((a, b) => a.geometry_index - b.geometry_index);
-    arrived = false; offCount = 0; offRoute = false; lastAlong = 0; curStep = -1; announced = '';
+    arrived = false; offCount = 0; offRoute = false; lastAlong = 0; curStep = -1; announced = ''; nowSpoken = false;
     ui.offRoute(false);
     stopWatch = geoWatch(path, onFixes, onError);
   }
@@ -179,7 +214,7 @@ export function createNavigator({ map, ui, recalc, onExit }) {
     const was = active;
     active = false; stopWatch?.(); stopWatch = null; unlock();
     document.removeEventListener('visibilitychange', onVis);
-    map.removeUser(); ui.show(false); ui.highlightStep(-1);
+    map.removeUser(); ui.show(false); ui.silence?.(); ui.highlightStep(-1);
     if (was) onExit?.();
   }
 

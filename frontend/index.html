@@ -10,6 +10,11 @@
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/about.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12151b" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 </head>
 <body>
   <div class="app">
@@ -89,6 +94,7 @@
         <section aria-labelledby="routes-title" id="routes-section" hidden>
           <h2 id="routes-title" class="section-title">Rotas</h2>
           <ul id="route-cards" class="cards"></ul>
+          <p class="hint level-note" id="level-note"></p>
         </section>
 
         <div class="toggle-row">
@@ -106,6 +112,7 @@
       <footer class="disclaimer" id="disclaimer">
         Baseado em ocorrências registradas pela SSP-SP (período <span id="period-range">carregando…</span>).
         Registros não refletem todo o risco real e a subnotificação varia entre regiões.
+        <button type="button" class="link-btn" id="about-open" aria-haspopup="dialog">Sobre e limitações</button>
       </footer>
     </aside>
 
@@ -123,6 +130,7 @@
           </div>
           <div class="nav-btns">
             <button type="button" class="nav-btn" id="nav-recenter" hidden>Recentrar</button>
+            <button type="button" class="nav-btn" id="nav-voice" aria-pressed="true" hidden>Voz: ligada</button>
             <button type="button" class="nav-btn nav-exit" id="nav-exit">Encerrar</button>
           </div>
         </div>
@@ -135,11 +143,48 @@
       </div>
     </main>
   </div>
+  <dialog id="about-dialog" class="about" aria-labelledby="about-title">
+    <div class="about-head">
+      <h2 id="about-title">Sobre o SampaNav</h2>
+      <button type="button" class="icon-btn" id="about-close" aria-label="Fechar" title="Fechar">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="about-body">
+      <p>O SampaNav sugere rotas a pé e de carro em São Paulo que equilibram tempo de viagem e exposição a ocorrências registradas.</p>
+      <h3>Como funciona</h3>
+      <ul>
+        <li>Usa ocorrências da SSP-SP dos últimos 24 meses (<span id="about-range">carregando…</span>), com peso decrescente para as mais antigas.</li>
+        <li>As ocorrências são agregadas numa grade H3 e ligadas às ruas do OpenStreetMap.</li>
+        <li>O risco de cada rua combina as ocorrências com um proxy de movimento (pedestres/veículos) e a iluminação.</li>
+        <li>Custo da rua = tempo × (1 + α·risco): α maior desvia mais de áreas de risco.</li>
+        <li>Três perfis: mais rápida, equilibrada e mais segura. O nível de risco é relativo às ruas da cidade no mesmo modo e período.</li>
+      </ul>
+      <h3>Limitações</h3>
+      <ul>
+        <li>Ocorrências registradas não são o risco real: a subnotificação varia entre regiões.</li>
+        <li>Áreas movimentadas têm mais registros, mesmo sendo muitas vezes mais seguras.</li>
+        <li>Crimes sexuais não constam nos dados.</li>
+        <li>A rota não substitui o seu julgamento: observe o entorno e evite o que parecer inseguro.</li>
+        <li>Em emergência, ligue <strong>190</strong>.</li>
+      </ul>
+      <h3>Fontes de dados</h3>
+      <ul>
+        <li><a href="https://www.ssp.sp.gov.br/estatistica/consultas" target="_blank" rel="noopener noreferrer">SSP-SP</a>: ocorrências criminais</li>
+        <li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> © colaboradores, licença ODbL</li>
+        <li><a href="https://geosampa.prefeitura.sp.gov.br/" target="_blank" rel="noopener noreferrer">GeoSampa</a>: dados urbanos da Prefeitura</li>
+        <li><a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a>: busca de endereços</li>
+        <li><a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>: mapa base</li>
+      </ul>
+      <p class="about-foot"><a href="https://github.com/alexzjss/SampaNav" target="_blank" rel="noopener noreferrer">Código no GitHub</a> · licença <a href="https://github.com/alexzjss/SampaNav/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a></p>
+    </div>
+  </dialog>
   <div id="snack" class="snack" role="status" aria-live="polite" hidden></div>
 
   <script src="config.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" integrity="sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js" integrity="sha384-nKUDlg+fT0U/eEt4KWP9n034kLe/eVj6k7CVjbu6qfRhJdEyinlGajS9+9AU+UZ5" crossorigin="anonymous"></script>
   <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/pwa.js"></script>
 </body>
 </html>

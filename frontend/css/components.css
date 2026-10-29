@@ -170,3 +170,12 @@ li:has(> .card-extra) > .card { border-bottom: 0; border-bottom-left-radius: 0; 
 }
 .user-dot.has-heading .user-heading { display: block; }
 .step-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); }
+
+/* ---- navegação: voz e ETA ---- */
+.nav-btn[aria-pressed="false"] { color: var(--text-muted); }
+.nav-btn[hidden] { display: none; }
+@media (max-width: 400px) {
+  .nav-main { gap: 8px; padding: 8px; }
+  .nav-icon { width: 44px; height: 44px; }
+  .nav-btn { padding: 0 8px; font-size: 12px; white-space: nowrap; }
+}
