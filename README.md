@@ -1,6 +1,6 @@
 # SampaNav
 
-O SampaNav sugere rotas a pé ou de carro pela cidade de São Paulo que equilibram
+O SampaNav sugere rotas a pé, de bicicleta ou de carro pela cidade de São Paulo que equilibram
 **tempo de deslocamento** e **exposição a ocorrências criminais** registradas pela
 SSP-SP. Para cada trajeto são mostradas até três opções:
 
@@ -13,6 +13,14 @@ filtrado por período do dia (madrugada, manhã, tarde, noite).
 
 ## Funcionalidades
 
+- **Bicicleta**: rotas sobre a malha a pé, a ~15 km/h (5 m/s em ciclovias). Calçadões
+  e escadas contam como trechos empurrando a bike. A malha a pé não tem mão de direção,
+  então a rota pode incluir contramão; o app avisa isso ao escolher o modo.
+- **Parada intermediária**: um ponto opcional entre origem e destino; cada perfil passa
+  por ele e a lista de passos marca a chegada à parada.
+- **Exposição por período**: o cartão da rota mostra a exposição e o nível do mesmo
+  trajeto de madrugada, de manhã, à tarde e à noite.
+- **Exportar GPX**: baixa a rota (trilha e manobras) para usar em outros apps.
 - **Navegação passo a passo**: instruções em português ("Vire à direita na Av. Paulista",
   "Continue pela Rua Augusta por 300 m") no cartão da rota selecionada.
 - **Modo navegação com GPS**: acompanha a posição, destaca o passo atual e mostra a
@@ -164,8 +172,9 @@ está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md), seção 5.
 - `GET /api/meta`: metadados do modelo de risco, perfis e períodos disponíveis.
 - `GET /api/geocode?q=...`: busca de endereços dentro de São Paulo.
 - `GET /api/reverse?lat=...&lon=...`: endereço mais próximo de um ponto (ou `null`).
-- `POST /api/routes`: calcula as rotas entre origem e destino, para um modo e período.
-  Cada rota traz `steps`, a lista de manobras para a navegação passo a passo.
+- `POST /api/routes`: calcula as rotas entre origem e destino (com `via` opcional), para
+  um modo (`walk`, `drive` ou `bike`) e período. Cada rota traz `steps` (manobras),
+  `exposure_by_period` e `level_by_period`.
 - `GET /api/risk?bbox=...&mode=...&period=...`: células H3 com risco, para a camada de calor.
 
 ## Deploy (grátis)

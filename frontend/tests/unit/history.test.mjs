@@ -71,7 +71,7 @@ test('JSON corrompido ou tipo errado vira lista vazia', () => {
 
 test('entradas inválidas são filtradas e o excesso cortado em 10', () => {
   const good = { o: { lat: 1, lon: 2 }, d: { lat: 3, lon: 4 }, mode: 'walk' };
-  store.set(KEY, JSON.stringify([null, 5, { ...good, mode: 'bike' }, { ...good, o: { lat: 'a', lon: 2 } },
+  store.set(KEY, JSON.stringify([null, 5, { ...good, mode: 'skate' }, { ...good, o: { lat: 'a', lon: 2 } },
     { ...good, d: null }, good, ...Array(20).fill(good)]));
   const list = loadHistory();
   assert.equal(list.length, 10);
@@ -85,4 +85,18 @@ test('localStorage que lança: nada quebra', () => {
   assert.doesNotThrow(() => { list = addHistory(q(1)); });
   assert.equal(list.length, 1); // devolve a lista em memória mesmo sem persistir
   assert.doesNotThrow(() => clearHistory());
+});
+
+test('modo bike e parada opcional (v) são aceitos e limpos', () => {
+  const e = { ...q(1, 'bike'), v: { lat: -23.123456789, lon: -46.5, label: 'Parada' } };
+  addHistory(e);
+  const [h] = loadHistory();
+  assert.equal(h.mode, 'bike'); assert.equal(h.v.lat, -23.12346); assert.equal(h.v.label, 'Parada');
+  // com e sem parada não são a mesma entrada
+  const list = addHistory(q(1, 'bike'));
+  assert.equal(list.length, 2);
+  assert.equal(list[0].v, undefined);
+  // v inválido em entrada gravada é descartado
+  store.set(KEY, JSON.stringify([{ ...q(2), v: { lat: 'x' }, t: 1 }]));
+  assert.equal(loadHistory()[0].v, undefined);
 });

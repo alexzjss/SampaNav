@@ -17,7 +17,7 @@ export function createMap(handlers) {
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
-  const markers = { origin: null, dest: null };
+  const markers = { origin: null, dest: null, via: null };
   let userMarker = null, stepMarker = null;
   let routes = [];
   let selectedId = null;
@@ -84,6 +84,7 @@ export function createMap(handlers) {
   function fitRoutes() {
     const b = new maplibregl.LngLatBounds();
     routes.forEach((r) => r.geometry.coordinates.forEach((c) => b.extend(c)));
+    if (markers.via) b.extend(markers.via.getLngLat());
     if (b.isEmpty()) return;
     const mobile = innerWidth < 768;
     map.fitBounds(b, { duration: 600, maxZoom: 16,
@@ -99,7 +100,7 @@ export function createMap(handlers) {
       const el = document.createElement('div');
       el.className = `pin ${kind}`;
       el.setAttribute('role', 'img');
-      el.setAttribute('aria-label', kind === 'origin' ? 'Origem' : 'Destino');
+      el.setAttribute('aria-label', { origin: 'Origem', dest: 'Destino', via: 'Parada' }[kind]);
       const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([p.lon, p.lat]).addTo(map);
       m.on('dragend', () => { const l = m.getLngLat(); handlers.onMarkerDrag?.(kind, { lat: l.lat, lon: l.lng }); });
       markers[kind] = m;

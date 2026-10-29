@@ -136,3 +136,28 @@ test('LEVEL_HINTS cobre todos os níveis e levelHint tem fallback', () => {
   assert.equal(f.levelHint('?'), f.LEVEL_NOTE);
   assert.match(f.LEVEL_NOTE, /75%.*90%/);
 });
+
+test('periodRows: barras relativas ao maior valor, nível e período atual', () => {
+  const r = { exposure_by_period: { madrugada: 4, manha: 1, tarde: 2, noite: 2 },
+    level_by_period: { madrugada: 'alto', manha: 'baixo', tarde: 'moderado', noite: 'moderado' } };
+  const rows = f.periodRows(r, 'tarde');
+  assert.deepEqual(rows.map((x) => x.key), ['madrugada', 'manha', 'tarde', 'noite']);
+  assert.deepEqual(rows.map((x) => x.pct), [100, 25, 50, 50]);
+  assert.deepEqual(rows.map((x) => x.current), [false, false, true, false]);
+  assert.equal(rows[1].label, 'Manhã'); assert.equal(rows[0].level, 'alto');
+});
+
+test('periodRows: sem dados ou tudo zero', () => {
+  assert.deepEqual(f.periodRows({}, 'noite'), []);
+  assert.deepEqual(f.periodRows(null, 'noite'), []);
+  const z = f.periodRows({ exposure_by_period: { madrugada: 0, manha: 0, tarde: 0, noite: 0 } }, 'now');
+  assert.deepEqual(z.map((x) => x.pct), [0, 0, 0, 0]);
+  assert.ok(z.every((x) => !x.current && x.level === null));
+  const part = f.periodRows({ exposure_by_period: { madrugada: 2, manha: 'x' } }, 'noite');
+  assert.equal(part[1].value, null); assert.equal(part[1].pct, 0); assert.equal(part[0].pct, 100);
+});
+
+test('fmtExposure', () => {
+  assert.equal(f.fmtExposure(1.25), '1,3');
+  assert.equal(f.fmtExposure(null), '–');
+});

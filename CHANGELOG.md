@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2026-10-29
+
+### Adicionado
+
+- Modo bicicleta, derivado da malha a pé (sem dados novos), com trechos empurrando a
+  bike em calçadões e escadas.
+- Parada intermediária opcional (`via`), com passo de chegada à parada.
+- Exposição e nível de risco da rota em cada período do dia, no cartão da rota.
+- Exportação da rota em GPX.
+
+### Alterado
+
+- Limiares de nível por período calculados em segundo plano após a carga dos grafos.
+- Cache do service worker passa a `sampanav-shell-v2`.
+
 ## [1.1.0] - 2026-10-29
 
 ### Adicionado

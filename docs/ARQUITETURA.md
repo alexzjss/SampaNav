@@ -326,3 +326,24 @@ houver) e `highway` (tipo). Cada rota em `POST /api/routes` ganha:
   atual, mostra distância até a próxima manobra, detecta saída da rota
   (> 40 m por 3 leituras) e oferece recalcular. Mantém tela ligada com Wake
   Lock quando disponível.
+
+## 12. Fase 3: bicicleta, parada e períodos
+
+Mudanças aditivas na API; clientes antigos continuam válidos.
+
+### Modo `bike`
+- `mode: "walk" | "drive" | "bike"` em `/api/routes` e `/api/risk`.
+- Derivado em memória do grafo a pé (sem arquivo novo): `RoadGraph.bike_view()` cria uma visão que compartilha por referência o igraph, as coordenadas, o KD-tree e o risco; só o tempo de viagem muda. Velocidades (constantes no topo de `routing.py`): 4,2 m/s (15 km/h) padrão; `cycleway` 5,0 m/s; `footway`/`pedestrian`/`corridor` 1,3 m/s (bike empurrada); `steps` 0,5 m/s. Sem `edge_highway` no grafo, tudo a 4,2 m/s.
+- Risco e categorias da bike = risco a pé (`risk_store` modo `walk`); `/api/risk?mode=bike` devolve as células a pé. Instruções dos passos usam o texto de `walk`.
+- Só existe se o grafo a pé carregou; senão `bike` entra em `missing`.
+- `/api/health`: `graphs.bike = {nodes, edges}` (iguais aos de `walk`). `/api/meta`: `modes` = modos realmente carregados, ex. `["walk","drive","bike"]`.
+- Limitação conhecida: a rede a pé ignora mão única, então rotas de bike podem seguir na contramão.
+
+### Parada opcional (`via`)
+- `POST /api/routes` aceita `via: {lat, lon} | null`. Cada perfil calcula `origem→via` + `via→destino` com o mesmo alpha e concatena as arestas; a seleção (sobreposição, `MIN_EXPOSURE_GAIN`, escada de alpha) roda sobre a rota concatenada.
+- `via` fora da bbox: 400 "Ponto fora da cidade de São Paulo." Se o `via` cair no mesmo nó da origem ou do destino, é ignorado (sem passo `waypoint`).
+- Novo `maneuver: "waypoint"` (instrução "Chegada à parada; siga em frente", distância 0), com `location` e `geometry_index` na geometria concatenada, antes do passo que começa na parada. O último passo continua `arrive`.
+- A resposta ganha `via: {lat, lon} | null` (eco do pedido).
+
+### Exposição por período
+Cada rota ganha `exposure_by_period` e `level_by_period`, com as chaves `madrugada`, `manha`, `tarde`, `noite` (sem `all`). Exposição = Σ comprimento·risco_p / 1000 (mesma unidade de `exposure`); nível = `risk_level(média_p, limiares[p])`. Calculado sobre as arestas da rota, sem novo Dijkstra. Quando o período da requisição coincide, bate com `exposure` e `risk_level`.

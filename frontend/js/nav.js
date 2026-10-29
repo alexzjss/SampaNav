@@ -113,7 +113,7 @@ function geoWatch(path, onFix, onError) {
  */
 const lcFirst = (t) => (t ? t[0].toLowerCase() + t.slice(1) : t);
 const MAN = { left: 'Vire à esquerda', right: 'Vire à direita', 'slight-left': 'Siga à esquerda', 'slight-right': 'Siga à direita',
-  'sharp-left': 'Vire acentuadamente à esquerda', 'sharp-right': 'Vire acentuadamente à direita', uturn: 'Faça o retorno', arrive: 'Você chegou' };
+  'sharp-left': 'Vire acentuadamente à esquerda', 'sharp-right': 'Vire acentuadamente à direita', uturn: 'Faça o retorno', waypoint: 'Parada', arrive: 'Você chegou' };
 /** Frase curta para o "agora": usa o tipo de manobra, senão a instrução. */
 export function shortManeuver(step) {
   return MAN[step?.maneuver] || step?.instruction || '';

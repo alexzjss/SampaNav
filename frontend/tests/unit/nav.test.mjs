@@ -117,5 +117,6 @@ test('turnNowM e shortManeuver', () => {
   assert.equal(nav.turnNowM({ distance_m: 1000, duration_s: 100 }), 60); // carro
   assert.equal(nav.turnNowM({}), 40);
   assert.equal(nav.shortManeuver({ maneuver: 'right', instruction: 'x' }), 'Vire à direita');
+  assert.equal(nav.shortManeuver({ maneuver: 'waypoint', instruction: 'Chegada à parada; siga em frente' }), 'Parada');
   assert.equal(nav.shortManeuver({ maneuver: 'foo', instruction: 'Siga' }), 'Siga');
 });
