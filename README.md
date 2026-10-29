@@ -7,12 +7,15 @@
 **Rotas a pé, de bicicleta ou de carro em São Paulo que equilibram tempo de deslocamento
 e exposição a ocorrências criminais registradas pela SSP-SP.**
 
+[![Acessar o app](https://img.shields.io/badge/app-sampanav.vercel.app-0455A1)](https://sampanav.vercel.app)
 [![CI](https://github.com/alexzjss/SampaNav/actions/workflows/ci.yml/badge.svg)](https://github.com/alexzjss/SampaNav/actions/workflows/ci.yml)
 [![Release dos dados](https://img.shields.io/github/v/release/alexzjss/SampaNav?label=dados&color=1a5fd0)](https://github.com/alexzjss/SampaNav/releases/latest)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![MapLibre](https://img.shields.io/badge/MapLibre_GL-396CB2?logo=maplibre&logoColor=white)
+
+**[Abrir o SampaNav →](https://sampanav.vercel.app)**
 
 <img src="docs/img/hero-desktop.png" alt="Tela do SampaNav no computador: três rotas a pé entre a Praça da Sé e o MASP, com a rota equilibrada colorida pelo risco de cada trecho e o bloco de exposição por período aberto" width="900">
 
@@ -265,7 +268,8 @@ está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md), seção 5.
 Três serviços gratuitos:
 
 - **Frontend na Vercel**: site estático de `frontend/` (`vercel.json`, sem build). A URL
-  da API fica em `frontend/config.js` (`apiBase`); vazio = mesma origem (dev local).
+  da API fica em `frontend/config.js` (`apiBase`, hoje `https://sampanav-api.onrender.com`); em
+  `localhost` o app usa a mesma origem (dev local).
 - **API no Render**: container Docker (`Dockerfile` e `render.yaml`) no plano free,
   com 512 MB de RAM. Dorme após 15 min sem uso e leva cerca de 1 a 2 min para acordar.
   As origens permitidas vêm de `ALLOWED_ORIGINS`.
@@ -289,6 +293,10 @@ Três serviços gratuitos:
   unitários do frontend, o `docker build` da imagem e um smoke test com Playwright no modo mock.
 
 ### Primeiro deploy
+
+Depois do deploy, siga o [guia pós-deploy](docs/GUIA-POS-DEPLOY.md): ligar o frontend à
+API, conferir CORS e o limite por IP, e configurar a atualização mensal.
+
 
 1. **Dados**: gere os pacotes e publique a primeira Release.
 
@@ -317,6 +325,7 @@ SampaNav/
 ├── docs/
 │   ├── ARQUITETURA.md      # contrato entre pipeline, API e frontend
 │   ├── LICENCAS-DADOS.md   # licenças e atribuições dos dados
+│   ├── GUIA-POS-DEPLOY.md  # checklist depois do deploy
 │   └── img/                # capturas usadas neste README
 ├── tools/screenshots/      # gera as capturas com dados reais (Playwright)
 ├── pipeline/               # scripts offline
