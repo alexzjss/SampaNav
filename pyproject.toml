@@ -1,6 +1,6 @@
 [project]
 name = "sampanav"
-version = "0.1.0"
+version = "1.0.0"
 description = "Roteamento seguro a pé e de carro na cidade de São Paulo"
 requires-python = ">=3.11"
 # Só o necessário para a API (é o que vai para o container de deploy).

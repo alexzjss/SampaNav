@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
+import os
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,6 +16,9 @@ import numpy as np
 from backend.app.steps import build_steps
 from pipeline.config import DATA_PROCESSED, H3_RES, PERIODS, SP_BBOX
 
+log = logging.getLogger("sampanav")
+
+ROUTE_QUEUE_TIMEOUT_S = 20.0  # espera máxima pelo lock de cálculo antes de responder 503
 M_PER_DEG = 111_320.0
 COSLAT = math.cos(math.radians(-23.55))
 
@@ -32,6 +38,10 @@ MAX_SNAP_M = 1000.0
 SEGMENT_BIN = 0.1
 SEGMENT_MIN_M = 40.0
 CATEGORY_STEP_M = 30.0
+
+
+class EngineBusy(Exception):
+    """Fila de cálculo cheia: não foi possível obter o lock a tempo."""
 
 
 class RoutingError(Exception):
@@ -435,6 +445,13 @@ def trim_memory() -> None:
         pass
 
 
+def queue_timeout() -> float:
+    try:
+        return float(os.environ.get("SAMPANAV_ROUTE_QUEUE_TIMEOUT", ROUTE_QUEUE_TIMEOUT_S))
+    except ValueError:
+        return ROUTE_QUEUE_TIMEOUT_S
+
+
 class Engine:
     def __init__(self, processed: Path = DATA_PROCESSED, modes=("walk", "drive"), load: bool = True):
         self.processed = Path(processed)
@@ -450,6 +467,7 @@ class Engine:
             self.load()
 
     def load(self) -> None:
+        t0 = time.perf_counter()
         self.risk_path = find_risk_parquet(self.processed)
         self.risk_store = RiskStore.from_parquet(self.risk_path) if self.risk_path else RiskStore(None)
         self.meta = self._load_meta()
@@ -461,6 +479,7 @@ class Engine:
                 self.missing.append(m)
         trim_memory()
         self.ready.set()
+        log.info("engine carregado em %.1fs grafos=%s ausentes=%s", time.perf_counter() - t0, list(self.graphs), self.missing)
 
     def _load_meta(self) -> dict:
         p = self.processed / "risk_meta.json"
@@ -478,10 +497,22 @@ class Engine:
         for lat, lon in (o, d):
             if not in_bbox(lat, lon):
                 raise RoutingError("Ponto fora da cidade de São Paulo.")
-        with self._lock:
+        timeout = queue_timeout()
+        t0 = time.perf_counter()
+        if not self._lock.acquire(timeout=timeout):
+            raise EngineBusy(f"lock não obtido em {timeout:g}s")
+        t1 = time.perf_counter()
+        try:
             routes = g.routes(o, d, period)
             out = self._serialize(g, routes, period)
+        finally:
+            self._lock.release()
         trim_memory()
+        t2 = time.perf_counter()
+        log.info(
+            "rota mode=%s period=%s routes=%d fastest_m=%.0f compute_ms=%.0f queue_ms=%.0f",
+            mode, period, len(out), out[0]["distance_m"] if out else 0, (t2 - t1) * 1000, (t1 - t0) * 1000,
+        )
         return out
 
     def _serialize(self, g: RoadGraph, routes: list[Route], period: str) -> list[dict]:

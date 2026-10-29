@@ -1,6 +1,6 @@
 """Baixa as planilhas de dados criminais da SSP-SP para data/raw/.
 
-Uso: python -m pipeline.download_ssp --years 2025 2026
+Uso: python -m pipeline.download_ssp --years 2024 2025 2026
 """
 
 import argparse
@@ -46,7 +46,7 @@ def download_year(year: int, force: bool = False, kind: str = "SPDadosCriminais"
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--years", nargs="+", type=int, default=[2025, 2026])
+    ap.add_argument("--years", nargs="+", type=int, default=[2024, 2025, 2026])
     ap.add_argument("--force", action="store_true", help="rebaixa mesmo se já existir")
     ap.add_argument("--aux", action="store_true",
                     help="baixa também CelularesSubtraidos e VeiculosSubtraidos")

@@ -24,3 +24,50 @@ jobs:
 
       - name: Test
         run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Testes unitários da lógica pura (sem dependências); o glob exclui o smoke.
+      - name: Unit tests
+        run: node --test 'frontend/tests/unit/*.test.mjs'
+
+  # O Dockerfile baixa os dados da última Release (ARG DATA_URL), então o build
+  # valida também que a Release existe e o tar.gz extrai. É barato (slim + uv sync),
+  # por isso roda sempre, sem filtro de paths.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t sampanav:ci .
+
+  # Smoke com navegador real no modo mock (sem backend): página sobe, rotas aparecem.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: |
+          npm i --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: Serve frontend
+        run: |
+          python3 -m http.server 8000 --directory frontend &
+          for i in $(seq 1 20); do curl -sf http://localhost:8000/ >/dev/null && break; sleep 0.5; done
+
+      - name: Smoke test (mock)
+        run: node frontend/tests/smoke/smoke.mjs

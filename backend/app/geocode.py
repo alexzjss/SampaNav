@@ -9,7 +9,7 @@ import httpx
 from pipeline.config import SP_BBOX
 
 PHOTON_URL = "https://photon.komoot.io/api/"
-USER_AGENT = "SampaNav/0.1 (+https://github.com/mpatellidev/SampaNav)"
+USER_AGENT = "SampaNav/1.0 (+https://github.com/alexzjss/SampaNav)"
 CACHE_SIZE = 512
 
 
