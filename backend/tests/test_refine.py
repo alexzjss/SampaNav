@@ -30,16 +30,18 @@ def test_nan_in_body_is_422_not_500(data_dir, tmp_path):
 
 
 def test_client_ip_ignores_spoofable_xff_prefix(monkeypatch):
-    # cadeia em produção: "<forjado pelo cliente>, <IP real>, <borda>"; com 2 proxies, o real é o penúltimo
-    assert client_ip(_req({"x-forwarded-for": "6.6.6.6, 1.2.3.4, 172.70.1.1"})) == "1.2.3.4"
-    assert client_ip(_req({"x-forwarded-for": "1.2.3.4, 172.70.1.1"})) == "1.2.3.4"
+    # cadeia medida no Render: "<cliente>, <borda Cloudflare>, <rede interna>"; com o
+    # cliente forjando, o valor dele vem antes: "6.6.6.6,<cliente>, <borda>, <interna>"
+    chain = "6.6.6.6,160.79.106.134, 104.22.160.30, 10.194.65.31"
+    assert client_ip(_req({"x-forwarded-for": chain})) == "160.79.106.134"
+    assert client_ip(_req({"x-forwarded-for": "160.79.106.21, 104.22.100.19, 10.197.204.143"})) == "160.79.106.21"
     assert client_ip(_req({"x-forwarded-for": "2001:db8::1"})) == "2001:db8::1"  # lista curta
     monkeypatch.setenv("SAMPANAV_TRUSTED_PROXIES", "1")
     assert client_ip(_req({"x-forwarded-for": "6.6.6.6, 1.2.3.4"})) == "1.2.3.4"
     monkeypatch.delenv("SAMPANAV_TRUSTED_PROXIES")
     # valor arbitrário/gigante vira chave do limitador: cai no IP da conexão
     assert client_ip(_req({"x-forwarded-for": "x" * 5000})) == "9.9.9.9"
-    assert client_ip(_req({"x-forwarded-for": "lixo, 172.70.1.1"})) == "9.9.9.9"
+    assert client_ip(_req({"x-forwarded-for": "lixo, 172.70.1.1, 10.0.0.1"})) == "9.9.9.9"
     assert client_ip(_req({})) == "9.9.9.9"
 
 
@@ -47,7 +49,7 @@ def test_client_ip_prefers_edge_header(monkeypatch):
     h = {"cf-connecting-ip": "203.0.113.7", "x-forwarded-for": "10.0.0.5, 172.70.1.1"}
     assert client_ip(_req(h)) == "203.0.113.7"
     # cabeçalho de borda inválido: segue para o X-Forwarded-For
-    assert client_ip(_req({"cf-connecting-ip": "lixo", "x-forwarded-for": "10.0.0.5, 172.70.1.1"})) == "10.0.0.5"
+    assert client_ip(_req({"cf-connecting-ip": "lixo", "x-forwarded-for": "10.0.0.5, 172.70.1.1, 10.9.0.1"})) == "10.0.0.5"
     monkeypatch.setenv("SAMPANAV_CLIENT_IP_HEADER", "true-client-ip")
     assert client_ip(_req({"true-client-ip": "198.51.100.2", "cf-connecting-ip": "203.0.113.7"})) == "198.51.100.2"
 
@@ -58,7 +60,7 @@ def test_spoofed_xff_does_not_bypass_limit(data_dir, tmp_path):
     with TestClient(app) as c:
         codes = [
             c.post("/api/routes", json=body,
-                   headers={"x-forwarded-for": f"10.0.0.{i}, 203.0.113.7, 172.70.{i}.1"}).status_code
+                   headers={"x-forwarded-for": f"10.0.0.{i},203.0.113.7, 172.70.{i}.1, 10.9.0.1"}).status_code
             for i in range(3)
         ]
     assert codes == [200, 429, 429]
