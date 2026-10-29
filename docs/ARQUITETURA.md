@@ -218,7 +218,7 @@ limite de 20 000 células por resposta. Frontend desenha com h3-js.
 
 ```bash
 uv sync
-uv run python -m pipeline.download_ssp --years 2025 2026
+uv run python -m pipeline.download_ssp --years 2024 2025 2026
 uv run python -m pipeline.build_risk
 uv run python -m pipeline.build_graph
 uv run uvicorn backend.app.main:app --reload
