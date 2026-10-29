@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SampaNav">
+  <defs>
+    <clipPath id="cm"><rect width="512" height="512" rx="0"/></clipPath>
+    <pattern id="pm" width="160" height="160" patternUnits="userSpaceOnUse" x="0" y="0"><rect width="160" height="160" fill="#F5F3EE"/><polygon points="-80,-80 -40,-80 0,-40 40,-40 0,0 -40,0 -80,-40 -120,-40" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="80,-80 120,-80 160,-40 200,-40 160,0 120,0 80,-40 40,-40" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="0,0 40,0 80,40 120,40 80,80 40,80 0,40 -40,40" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="160,0 200,0 240,40 280,40 240,80 200,80 160,40 120,40" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="-80,80 -40,80 0,120 40,120 0,160 -40,160 -80,120 -120,120" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="80,80 120,80 160,120 200,120 160,160 120,160 80,120 40,120" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="0,160 40,160 80,200 120,200 80,240 40,240 0,200 -40,200" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/><polygon points="160,160 200,160 240,200 280,200 240,240 200,240 160,200 120,200" fill="#111111" stroke="#111111" stroke-width="0.8" stroke-linejoin="miter"/></pattern>
+  </defs>
+  <g clip-path="url(#cm)">
+    <rect width="512" height="512" fill="url(#pm)"/>
+    <path d="M148 372 V274 H260 V170 H364" fill="none" stroke="#111111" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M148 372 V274 H260 V170 H364" fill="none" stroke="#fff" stroke-width="68" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M148 372 V274 H260 V170 H364" fill="none" stroke="#0455A1" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="148" cy="372" r="30" fill="#fff" stroke="#111111" stroke-width="12"/>
+    <circle cx="148" cy="372" r="12" fill="#0455A1"/>
+    <circle cx="364" cy="170" r="48" fill="#111111"/>
+    <circle cx="364" cy="170" r="38" fill="#fff"/>
+    <circle cx="364" cy="170" r="25" fill="#D62E2E"/>
+  </g>
+</svg>

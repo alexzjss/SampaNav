@@ -84,7 +84,7 @@ input[type=text], select {
 .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .legend-bar { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--risk-0), var(--risk-1), var(--risk-2), var(--risk-3)); }
 .pin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5); cursor: grab; }
-.pin.origin { background: #1a5fd0; }
+.pin.origin { background: #0455a1; }
 .pin.dest { background: #c0262d; }
 .pin.via { background: #7b3fc4; }
 .via-combo { display: flex; align-items: center; gap: 8px; }

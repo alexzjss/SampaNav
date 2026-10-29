@@ -1,10 +1,10 @@
 // Service worker: app shell em cache. Nunca guarda /api/, config.js nem requisições de outras origens.
-const CACHE = 'sampanav-shell-v3';
+const CACHE = 'sampanav-shell-v4';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/base.css', 'css/layout.css', 'css/components.css', 'css/about.css',
   'js/main.js', 'js/pwa.js', 'js/ui.js', 'js/format.js', 'js/gpx.js', 'js/icons.js', 'js/history.js', 'js/api.js', 'js/map.js', 'js/mock.js', 'js/nav.js', 'js/navui.js', 'js/speech.js', 'js/urlstate.js', 'config.js',
-  'img/logo.svg', 'img/icon-192.png',
+  'img/logo.svg', 'img/favicon.svg', 'img/icon-192.png',
 ];
 
 self.addEventListener('install', (e) => {
