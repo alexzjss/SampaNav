@@ -38,6 +38,8 @@ jobs:
           mkdir -p dist-prev data/processed data/raw
           gh release download --pattern 'sampanav-*.tar.gz' --dir dist-prev
           tar -xzf dist-prev/sampanav-data.tar.gz -C data/processed
+          # guarda o risk_meta.json anterior para a validação (build_risk sobrescreve)
+          mkdir -p prev && cp data/processed/risk_meta.json prev/risk_meta.json
           if [ -f dist-prev/sampanav-inputs.tar.gz ]; then tar -xzf dist-prev/sampanav-inputs.tar.gz -C data/raw; fi
 
       - name: Baixar planilhas da SSP-SP (24 meses cobrem até 3 anos-calendário)
@@ -50,6 +52,14 @@ jobs:
 
       - name: Juntar risco ao grafo
         run: PYTHONPATH=. uv run python -m pipeline.build_graph --risk-only
+
+      - name: Validar dados
+        run: |
+          set +e
+          PYTHONPATH=. uv run python -m pipeline.validate_data --new data/processed --prev prev | tee validate-summary.md
+          rc=${PIPESTATUS[0]}
+          cat validate-summary.md >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
 
       - name: Empacotar e publicar Release
         run: |
