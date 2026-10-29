@@ -5,6 +5,15 @@ Todas as mudanças notáveis deste projeto são documentadas aqui.
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.2] - 2026-10-29
+
+### Corrigido
+
+- Reserva do IP do cliente (quando falta `CF-Connecting-IP`) passa a usar a 3ª entrada
+  do `X-Forwarded-For` a partir do fim, que é a cadeia medida no Render
+  (cliente, borda do Cloudflare, rede interna). O caminho principal da 1.4.1, via
+  `CF-Connecting-IP`, foi conferido em produção e está correto.
+
 ## [1.4.1] - 2026-10-29
 
 ### Corrigido

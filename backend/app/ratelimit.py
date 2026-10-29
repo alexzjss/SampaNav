@@ -31,20 +31,21 @@ def _valid_ip(raw: str) -> str | None:
 
 def trusted_proxies() -> int:
     try:
-        return max(1, int(os.environ.get("SAMPANAV_TRUSTED_PROXIES", "2")))
+        return max(1, int(os.environ.get("SAMPANAV_TRUSTED_PROXIES", "3")))
     except ValueError:
-        return 2
+        return 3
 
 
 def client_ip(request: Request) -> str:
     """IP do cliente para o limitador, sem confiar no que o próprio cliente manda.
 
-    1. Cabeçalho de borda, se configurado e presente (`SAMPANAV_CLIENT_IP_HEADER`,
-       padrão `cf-connecting-ip`).
-    2. X-Forwarded-For contado da direita: cada proxy anexa o IP de quem o chamou, então
-       com N proxies confiáveis o IP real é a N-ésima entrada a partir do fim
-       (`SAMPANAV_TRUSTED_PROXIES`, padrão 2: Cloudflare + balanceador do Render, medido em
-       produção). O início da lista vem do cliente e pode ser forjado.
+    1. Cabeçalho da borda (`SAMPANAV_CLIENT_IP_HEADER`, padrão `cf-connecting-ip`): o Render
+       fica atrás do Cloudflare, que sobrescreve esse cabeçalho com o IP real (medido em
+       produção; um X-Forwarded-For forjado não o altera).
+    2. Reserva, sem esse cabeçalho: X-Forwarded-For contado da direita. Cada proxy anexa o
+       IP de quem o chamou; no Render a cadeia é "<cliente>, <borda Cloudflare>, <rede
+       interna>", então o IP real é a 3ª entrada a partir do fim (`SAMPANAV_TRUSTED_PROXIES`).
+       O início da lista vem do cliente e pode ser forjado.
     3. Sem proxy, o IP da conexão.
     """
     name = os.environ.get("SAMPANAV_CLIENT_IP_HEADER", "cf-connecting-ip").strip().lower()

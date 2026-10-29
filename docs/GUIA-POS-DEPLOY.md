@@ -88,14 +88,16 @@ mas só se a validação passar.
 
 ## 5. Limite de requisições por IP (resolvido)
 
-Testado em produção em 29/10/2026: com `X-Forwarded-For` forjado e diferente a cada
-requisição, as 25 chamadas a `/api/routes` passavam (o limite era contornado). O Render
-fica atrás do Cloudflare, então a API passou a usar `CF-Connecting-IP`, que o Cloudflare
-sobrescreve com o IP real. Sem esse cabeçalho, usa a última entrada do `X-Forwarded-For`
-(a anexada pelo proxy). Se a API mudar de host, ajuste `SAMPANAV_CLIENT_IP_HEADER`.
+A versão até a 1.4.0 usava a primeira entrada do `X-Forwarded-For`, que o cliente controla:
+com um IP inventado diferente a cada chamada, o limite era contornado. Desde a 1.4.1 a API
+usa `CF-Connecting-IP`, que o Cloudflare (na frente do Render) sobrescreve com o IP real.
+Conferido em produção: com `X-Forwarded-For: 6.6.6.6` forjado, a API continua vendo o IP
+verdadeiro. Sem esse cabeçalho, a reserva é a 3ª entrada do `X-Forwarded-For` a partir do
+fim (cadeia do Render: cliente, borda do Cloudflare, rede interna;
+`SAMPANAV_TRUSTED_PROXIES`).
 
-Para conferir de novo depois de um deploy, rode o laço abaixo. Mesmo com IPs inventados,
-deve aparecer `429` depois de umas 20 respostas `200`:
+Para conferir do seu computador (com IP fixo), mesmo com IPs inventados deve aparecer
+`429` depois de umas 20 respostas `200`:
 
 ```bash
 API=https://sampanav-api.onrender.com
@@ -105,6 +107,10 @@ for i in $(seq 1 25); do
     -d '{"origin":{"lat":-23.5503,"lon":-46.6339},"destination":{"lat":-23.5614,"lon":-46.6559},"mode":"walk"}'
 done; echo
 ```
+
+Uma rede que troca de IP a cada requisição (alguns proxies corporativos ou de nuvem)
+nunca chega ao `429`, porque cada chamada conta como um cliente diferente; isso não é
+falha do limite.
 
 ## 6. Cold start do plano free (opcional)
 
