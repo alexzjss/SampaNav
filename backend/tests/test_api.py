@@ -163,3 +163,51 @@ def test_frontend_contract_steps_cors_preflight_midblock(data_dir, tmp_path, mon
             assert st[-1]["location"] == coords[-1]
             for s in st:
                 assert isinstance(s["geometry_index"], int) and s["location"] == coords[s["geometry_index"]]
+
+
+def _photon_mock(monkeypatch, handler):
+    import httpx
+
+    monkeypatch.setattr(geo, "_client", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    geo._rcache.clear()
+
+
+_FEAT = {"features": [{"geometry": {"coordinates": [-46.6333, -23.5505]},
+                       "properties": {"name": "Praça da Sé", "city": "São Paulo"}}]}
+
+
+def test_reverse_ok_and_cache(client, monkeypatch):
+    calls = []
+
+    def handler(req):
+        import httpx
+
+        calls.append(req)
+        return httpx.Response(200, json=_FEAT)
+
+    _photon_mock(monkeypatch, handler)
+    r = client.get("/api/reverse", params={"lat": -23.55051, "lon": -46.63331})
+    assert r.status_code == 200 and r.json()["label"] == "Praça da Sé, São Paulo"
+    assert calls[0].url.path == "/reverse" and calls[0].url.params["limit"] == "1"
+    client.get("/api/reverse", params={"lat": -23.55052, "lon": -46.63332})  # mesma célula de ~11 m
+    assert len(calls) == 1
+
+
+def test_reverse_empty(client, monkeypatch):
+    import httpx
+
+    _photon_mock(monkeypatch, lambda req: httpx.Response(200, json={"features": []}))
+    r = client.get("/api/reverse", params={"lat": -23.55, "lon": -46.63})
+    assert r.status_code == 200 and r.json() is None
+
+
+def test_reverse_outside_bbox(client):
+    assert client.get("/api/reverse", params={"lat": 0, "lon": 0}).status_code == 400
+    assert client.get("/api/reverse", params={"lat": "x", "lon": 0}).status_code == 422
+
+
+def test_reverse_upstream_failure(client, monkeypatch):
+    import httpx
+
+    _photon_mock(monkeypatch, lambda req: httpx.Response(500))
+    assert client.get("/api/reverse", params={"lat": -23.55, "lon": -46.63}).status_code == 502

@@ -9,6 +9,7 @@ import httpx
 from pipeline.config import SP_BBOX
 
 PHOTON_URL = "https://photon.komoot.io/api/"
+PHOTON_REVERSE_URL = "https://photon.komoot.io/reverse"
 USER_AGENT = "SampaNav/1.0 (+https://github.com/alexzjss/SampaNav)"
 CACHE_SIZE = 512
 
@@ -18,6 +19,7 @@ class GeocodeError(Exception):
 
 
 _cache: OrderedDict[str, list[dict]] = OrderedDict()
+_rcache: OrderedDict[tuple[float, float], dict | None] = OrderedDict()
 _client: httpx.AsyncClient | None = None
 
 
@@ -85,4 +87,24 @@ async def geocode(q: str) -> list[dict]:
     _cache[key] = result
     while len(_cache) > CACHE_SIZE:
         _cache.popitem(last=False)
+    return result
+
+
+async def reverse(lat: float, lon: float) -> dict | None:
+    """Endereço mais próximo do ponto (cache por coordenadas em ~4 casas ≈ 11 m)."""
+    key = (round(lat, 4), round(lon, 4))
+    if key in _rcache:
+        _rcache.move_to_end(key)
+        return _rcache[key]
+    params = {"lat": lat, "lon": lon, "lang": "default", "limit": 1}
+    try:
+        r = await _get_client().get(PHOTON_REVERSE_URL, params=params)
+        r.raise_for_status()
+        found = parse(r.json())
+    except (httpx.HTTPError, ValueError) as e:
+        raise GeocodeError(f"Falha ao consultar o serviço de geocodificação: {e}") from e
+    result = found[0] if found else None
+    _rcache[key] = result
+    while len(_rcache) > CACHE_SIZE:
+        _rcache.popitem(last=False)
     return result

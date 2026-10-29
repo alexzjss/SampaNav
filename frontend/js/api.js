@@ -63,6 +63,9 @@ export async function getMeta() { return MOCK ? (await mock()).meta() : http('/a
 export async function geocode(q, signal) {
   return MOCK ? (await mock()).geocode(q) : http(`/api/geocode?q=${encodeURIComponent(q)}`, { signal });
 }
+export async function reverseGeocode(lat, lon, signal) {
+  return MOCK ? (await mock()).reverse(lat, lon) : http(`/api/reverse?lat=${lat}&lon=${lon}`, { signal }, 0);
+}
 export async function postRoutes(payload) {
   return MOCK ? (await mock()).routes(payload) : http('/api/routes', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
