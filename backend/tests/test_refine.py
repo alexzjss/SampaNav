@@ -29,13 +29,35 @@ def test_nan_in_body_is_422_not_500(data_dir, tmp_path):
         assert r.json()["detail"][0]["loc"] == ["body", "origin", "lat"]
 
 
-def test_client_ip_xff_valid_and_garbage():
-    assert client_ip(_req({"x-forwarded-for": "1.2.3.4, 10.0.0.1"})) == "1.2.3.4"
+def test_client_ip_ignores_spoofable_xff_prefix():
+    # o cliente controla o início do X-Forwarded-For; o proxy anexa o IP real no fim
+    assert client_ip(_req({"x-forwarded-for": "1.2.3.4, 10.0.0.1"})) == "10.0.0.1"
     assert client_ip(_req({"x-forwarded-for": "2001:db8::1"})) == "2001:db8::1"
     # valor arbitrário/gigante vira chave do limitador: cai no IP da conexão
     assert client_ip(_req({"x-forwarded-for": "x" * 5000})) == "9.9.9.9"
-    assert client_ip(_req({"x-forwarded-for": "not-an-ip, 1.2.3.4"})) == "9.9.9.9"
+    assert client_ip(_req({"x-forwarded-for": "1.2.3.4, not-an-ip"})) == "9.9.9.9"
     assert client_ip(_req({})) == "9.9.9.9"
+
+
+def test_client_ip_prefers_edge_header(monkeypatch):
+    h = {"cf-connecting-ip": "203.0.113.7", "x-forwarded-for": "10.0.0.5, 172.70.1.1"}
+    assert client_ip(_req(h)) == "203.0.113.7"
+    # cabeçalho de borda inválido: segue para o X-Forwarded-For
+    assert client_ip(_req({"cf-connecting-ip": "lixo", "x-forwarded-for": "10.0.0.5, 172.70.1.1"})) == "172.70.1.1"
+    monkeypatch.setenv("SAMPANAV_CLIENT_IP_HEADER", "true-client-ip")
+    assert client_ip(_req({"true-client-ip": "198.51.100.2", "cf-connecting-ip": "203.0.113.7"})) == "198.51.100.2"
+
+
+def test_spoofed_xff_does_not_bypass_limit(data_dir, tmp_path):
+    app = create_app(processed_dir=data_dir, frontend_dir=tmp_path / "nofront", rate_limits={"routes": 1})
+    body = {"origin": {"lat": ORIGIN[0], "lon": ORIGIN[1]}, "destination": {"lat": DEST[0], "lon": DEST[1]}}
+    with TestClient(app) as c:
+        codes = [
+            c.post("/api/routes", json=body,
+                   headers={"x-forwarded-for": f"10.0.0.{i}", "cf-connecting-ip": "203.0.113.7"}).status_code
+            for i in range(3)
+        ]
+    assert codes == [200, 429, 429]
 
 
 def test_fmt_dist_rounding_boundary():
