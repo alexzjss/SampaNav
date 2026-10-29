@@ -37,3 +37,5 @@ Primeira versão pública, reescrita sobre dados reais da cidade de São Paulo.
 - Limite de requisições por IP na API, fila de cálculo com timeout (503) e logs
   estruturados por rota (sem coordenadas).
 - Validação dos dados antes de publicar uma nova Release.
+- Testes unitários do frontend (`node --test`), build do Docker e smoke test com
+  Playwright no CI.

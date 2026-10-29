@@ -135,6 +135,13 @@ por padrão.
   uv run pytest
   ```
 
+  Testes do frontend (Node 22, sem dependências) e smoke test no navegador, em modo mock:
+
+  ```bash
+  node --test 'frontend/tests/unit/*.test.mjs'
+  node frontend/tests/smoke/smoke.mjs  # com o frontend servido em localhost:8000 e Playwright instalado
+  ```
+
 - **Desenvolvimento só do frontend**: abra <http://localhost:8000/?mock=1>. Nesse
   modo, `frontend/js/api.js` usa respostas falsas de `frontend/js/mock.js` em vez
   de chamar a API, o que permite trabalhar na interface sem os dados processados.
@@ -160,13 +167,24 @@ Três serviços gratuitos:
 - **API no Render**: container Docker (`Dockerfile` e `render.yaml`) no plano free,
   com 512 MB de RAM. Dorme após 15 min sem uso e leva cerca de 1 a 2 min para acordar.
   As origens permitidas vêm de `ALLOWED_ORIGINS`.
+- **Proteção da API**: limite de requisições por IP e por minuto (padrão: 20 em
+  `/api/routes`, 60 em `/api/geocode`, 120 em `/api/risk`; acima disso, 429 com
+  `Retry-After`). Os cálculos de rota rodam um por vez; se a fila passar de 20 s, a API
+  responde 503 e o frontend tenta de novo. Variáveis: `SAMPANAV_RATE_ROUTES`,
+  `SAMPANAV_RATE_GEOCODE`, `SAMPANAV_RATE_RISK` (0 desliga) e
+  `SAMPANAV_ROUTE_QUEUE_TIMEOUT` (segundos). Cada rota gera uma linha de log com modo,
+  período, distância e tempos de cálculo e de fila, sem coordenadas.
 - **Dados**: não vão para o git. `pipeline/package_data.py` gera `sampanav-data.tar.gz`
   (grafos, risco e metadados) e `sampanav-inputs.tar.gz` (pontos de iluminação). O
   Dockerfile baixa o `sampanav-data.tar.gz` da Release mais recente durante o build.
 - **Atualização mensal**: o workflow "Atualização mensal dos dados" (dia 10) baixa as
-  planilhas dos últimos 3 anos, recalcula o risco e publica nova Release. Com o segredo
+  planilhas dos últimos 3 anos, recalcula o risco, valida o resultado
+  (`pipeline/validate_data.py`: volume mínimo, queda máxima de 30% frente à Release
+  anterior, data mais recente que não regride, risco entre 0 e 1 em todos os modos e
+  períodos) e só então publica nova Release. Com o segredo
   opcional `RENDER_DEPLOY_HOOK_URL`, também dispara o deploy no Render.
-- **CI**: `ruff check` e `pytest` em push para `main` e em pull requests.
+- **CI**: em push para `main` e em pull requests roda `ruff check` e `pytest`, os testes
+  unitários do frontend, o `docker build` da imagem e um smoke test com Playwright no modo mock.
 
 ### Primeiro deploy
 
@@ -203,6 +221,7 @@ SampaNav/
 │   ├── footfall.py         # proxy de movimento pela malha a pé
 │   ├── lighting.py         # pontos de iluminação (GeoSampa) -> densidade H3
 │   ├── evaluate.py         # diagnóstico do modelo de risco
+│   ├── validate_data.py    # checagens antes de publicar a Release
 │   ├── build_graph.py      # rede OSM + risco -> grafos por modo
 │   └── package_data.py     # empacota os dados para a Release
 ├── backend/
@@ -210,7 +229,8 @@ SampaNav/
 │   │   ├── main.py         # FastAPI; também serve o frontend em /
 │   │   ├── routing.py      # carga dos grafos e cálculo de rotas
 │   │   ├── steps.py        # manobras e instruções em português
-│   │   └── geocode.py      # proxy para o Photon, com bbox de SP
+│   │   ├── geocode.py      # proxy para o Photon, com bbox de SP
+│   │   └── ratelimit.py    # limite de requisições por IP
 │   └── tests/
 ├── frontend/               # HTML, CSS e JS estáticos, sem build
 │   ├── index.html
@@ -231,6 +251,13 @@ SampaNav/
     ├── processed/          # saídas do pipeline (parquet, npz, json)
     └── dist/               # pacotes para a Release
 ```
+
+## Licença
+
+O código está sob a licença MIT (veja [`LICENSE`](LICENSE)). Os dados de terceiros
+(OpenStreetMap, SSP-SP, GeoSampa, Photon, OpenFreeMap) seguem as próprias licenças e
+exigências de atribuição, descritas em [`docs/LICENCAS-DADOS.md`](docs/LICENCAS-DADOS.md).
+O histórico de versões está em [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Créditos
 
