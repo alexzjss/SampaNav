@@ -124,3 +124,15 @@ export function periodRows(route, currentPeriod) {
 }
 /** Exposição para exibição: 1 casa decimal, vírgula. */
 export function fmtExposure(v) { return v == null ? '–' : v.toFixed(1).replace('.', ','); }
+
+export const MSG_RATE = 'Muitas requisições; aguarde um instante.';
+export const MSG_GENERIC = 'Algo deu errado. Tente novamente.';
+/** Mensagem amigável para uma resposta HTTP de erro: nunca expõe texto bruto de 5xx nem códigos. */
+export function httpErrorMessage(status, detail) {
+  if (status === 429) return MSG_RATE;
+  if (status === 503) return typeof detail === 'string' && detail ? detail : 'Servidor iniciando; tente novamente em instantes.';
+  if (status >= 500) return 'O servidor está indisponível no momento. Tente novamente em instantes.';
+  if (status === 400 && typeof detail === 'string' && detail) return detail;
+  if (status === 400 || status === 422) return 'Requisição inválida. Confira os pontos escolhidos.';
+  return MSG_GENERIC;
+}

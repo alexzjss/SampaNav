@@ -1,47 +1,98 @@
+<div align="center">
+
+<img src="frontend/img/logo.svg" alt="" width="72" height="72">
+
 # SampaNav
 
-O SampaNav sugere rotas a pé, de bicicleta ou de carro pela cidade de São Paulo que equilibram
-**tempo de deslocamento** e **exposição a ocorrências criminais** registradas pela
-SSP-SP. Para cada trajeto são mostradas até três opções:
+**Rotas a pé, de bicicleta ou de carro em São Paulo que equilibram tempo de deslocamento
+e exposição a ocorrências criminais registradas pela SSP-SP.**
 
-- **Mais rápida**: menor tempo, sem considerar risco;
-- **Equilibrada**: compromisso entre tempo e exposição;
-- **Mais segura**: menor exposição, aceitando desvios maiores.
+[![CI](https://github.com/alexzjss/SampaNav/actions/workflows/ci.yml/badge.svg)](https://github.com/alexzjss/SampaNav/actions/workflows/ci.yml)
+[![Release dos dados](https://img.shields.io/github/v/release/alexzjss/SampaNav?label=dados&color=1a5fd0)](https://github.com/alexzjss/SampaNav/releases/latest)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![MapLibre](https://img.shields.io/badge/MapLibre_GL-396CB2?logo=maplibre&logoColor=white)
 
-O mapa também exibe uma camada de calor com o risco por região, que pode ser
-filtrado por período do dia (madrugada, manhã, tarde, noite).
+<img src="docs/img/hero-desktop.png" alt="Tela do SampaNav no computador: três rotas a pé entre a Praça da Sé e o MASP, com a rota equilibrada colorida pelo risco de cada trecho e o bloco de exposição por período aberto" width="900">
+
+</div>
+
+## O que ele faz
+
+Para cada trajeto, o SampaNav calcula até três opções e mostra quanto cada uma reduz a
+exposição em troca de quanto tempo a mais:
+
+| Perfil | Peso do risco (α) | Para quem |
+|---|---|---|
+| **Mais rápida** | 0 | menor tempo, sem considerar risco |
+| **Equilibrada** | 2 | compromisso entre tempo e exposição |
+| **Mais segura** | 6 | menor exposição, aceitando desvios maiores |
+
+Alternativas que não reduzem a exposição em pelo menos 5% são descartadas, e o app
+diz quando nenhum desvio vale a pena. A rota selecionada é colorida trecho a trecho
+pelo risco, e a camada de calor mostra o risco por região em cada período do dia.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/img/mobile.png" alt="Versão para celular: mapa com as rotas no alto e cartões das rotas no painel inferior" width="260"><br><sub><b>Celular</b>: painel inferior com os cartões</sub></td>
+    <td align="center" width="33%"><img src="docs/img/navigation.gif" alt="Animação do modo navegação: o ponto do usuário avança pela rota e o banner atualiza a próxima manobra, a distância e a hora de chegada" width="260"><br><sub><b>Navegação</b>: próxima manobra, voz e hora de chegada</sub></td>
+    <td align="center" width="33%"><img src="docs/img/navigation.png" alt="Banner de navegação: em 180 m, vire levemente à direita na Praça Doutor João Mendes; 3,0 km, 38 min, chegada às 14:14" width="260"><br><sub><b>Instruções em português</b></sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/img/heatmap.png" alt="Mapa de risco: hexágonos coloridos do verde ao vermelho sobre o centro de São Paulo, com a rota por cima"><br><sub><b>Mapa de risco</b> em grade H3, por período do dia</sub></td>
+    <td width="50%"><img src="docs/img/bike.png" alt="Rota de bicicleta do Largo da Batata ao Ibirapuera: a equilibrada tem 25% menos exposição por 1 minuto a mais"><br><sub><b>Bicicleta</b>: 25% menos exposição por +1 min neste trajeto</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/img/dark.png" alt="A mesma tela no tema escuro"><br><sub><b>Tema escuro</b>, seguindo o sistema</sub></td>
+    <td width="50%"><img src="docs/img/about.png" alt="Janela Sobre e limitações, com o funcionamento do modelo, as limitações e as fontes de dados"><br><sub><b>Sobre e limitações</b>, dentro do app</sub></td>
+  </tr>
+</table>
+
+<sub>Capturas geradas com o backend real e os dados de setembro/2024 a agosto/2026
+(660 mil ocorrências). O mapa base das imagens é desenhado a partir das ruas do próprio
+grafo, então é mais simples que os tiles do OpenFreeMap usados no app. Para regerar:
+[`tools/screenshots`](tools/screenshots/README.md).</sub>
 
 ## Funcionalidades
 
-- **Bicicleta**: rotas sobre a malha a pé, a ~15 km/h (5 m/s em ciclovias). Calçadões
-  e escadas contam como trechos empurrando a bike. A malha a pé não tem mão de direção,
-  então a rota pode incluir contramão; o app avisa isso ao escolher o modo.
-- **Parada intermediária**: um ponto opcional entre origem e destino; cada perfil passa
-  por ele e a lista de passos marca a chegada à parada.
-- **Exposição por período**: o cartão da rota mostra a exposição e o nível do mesmo
-  trajeto de madrugada, de manhã, à tarde e à noite.
-- **Exportar GPX**: baixa a rota (trilha e manobras) para usar em outros apps.
-- **Navegação passo a passo**: instruções em português ("Vire à direita na Av. Paulista",
-  "Continue pela Rua Augusta por 300 m") no cartão da rota selecionada.
-- **Modo navegação com GPS**: acompanha a posição, destaca o passo atual e mostra a
-  distância até a próxima manobra, o tempo restante e a hora prevista de chegada.
-- **Instruções faladas**: as manobras são lidas em português pelo navegador (Web Speech
-  API), com botão para desligar a voz.
-- **Endereço ao clicar no mapa**: pontos definidos por clique ou arraste mostram o
-  endereço (geocodificação reversa) em vez de coordenadas.
-- **Instalável (PWA)**: manifesto, ícones e service worker que guarda a interface em
-  cache; ela abre mesmo enquanto a API acorda. Chamadas à API nunca vão para o cache.
-- **Sobre e limitações**: janela no app com o funcionamento do modelo, as limitações e
-  as fontes de dados. Os níveis de risco dos cartões trazem a explicação de que são
-  relativos às ruas da cidade no mesmo período.
-- **Recalcular ao sair da rota**: após 3 leituras seguidas a mais de 40 m da rota,
-  o app oferece recalcular a partir da posição atual.
-- **Compartilhar por link**: origem, destino, modo, período e rota ficam na URL, e
-  abri-la recalcula as rotas.
-- **Histórico local**: as últimas 10 buscas ficam no `localStorage` do navegador
-  (nada vai ao servidor) e podem ser apagadas.
-- **Aviso de servidor acordando**: no plano gratuito, o app mostra "Acordando o servidor"
-  enquanto a API não responde (veja [Deploy](#deploy-grátis)).
+**Rotas**
+- **Três perfis** com tempo, distância, nível de risco relativo à cidade, "X% menos
+  exposição · +Y min" e as categorias de ocorrência mais registradas no trajeto.
+- **A pé, de carro ou de bicicleta.** A bicicleta usa a malha a pé, a ~15 km/h, com
+  calçadões e escadas como trechos empurrando a bike. Essa malha não tem mão de
+  direção, então a rota pode incluir contramão, e ela ainda não prioriza ciclovias. O
+  app avisa isso ao escolher o modo.
+- **Parada intermediária** opcional: cada perfil passa por ela, e a lista de passos
+  marca a chegada.
+- **Exposição por período**: o mesmo trajeto de madrugada, de manhã, à tarde e à noite.
+- **Níveis explicados**: "alto" significa acima de 75% das ruas da cidade no mesmo
+  período, e assim por diante.
+
+**Navegação**
+- **Passo a passo em português** ("Vire à direita na Av. Paulista", "Continue pela
+  Rua Augusta por 300 m").
+- **Modo GPS**: segue a posição, destaca o passo atual e mostra a distância até a
+  próxima manobra, o tempo restante e a hora de chegada.
+- **Voz** em pt-BR pelo próprio navegador, com botão para desligar.
+- **Recálculo**: após 3 leituras seguidas a mais de 40 m da rota, o app oferece
+  recalcular a partir da posição atual.
+
+**Uso no dia a dia**
+- **Busca de endereços** com autocomplete, e o **endereço do ponto** ao clicar ou
+  arrastar no mapa.
+- **Compartilhar por link** (origem, destino, parada, modo, período e rota ficam na URL)
+  e **exportar GPX**.
+- **Histórico** das últimas 10 buscas, só no navegador.
+- **Aviso de servidor acordando**: no plano gratuito a API dorme; o app mostra
+  "Acordando o servidor" enquanto ela sobe (veja [Deploy](#deploy-grátis)).
+- **Instalável (PWA)**: a interface abre mesmo enquanto a API acorda, e o app avisa
+  quando há versão nova. Chamadas à API nunca vão para o cache.
+- **Acessível**: navegação por teclado, leitores de tela (auditoria axe sem violações
+  nos temas claro e escuro) e tema escuro automático.
 
 ## Limitações e uso responsável
 
@@ -71,8 +122,9 @@ Leia antes de usar ou apresentar os resultados.
   <https://www.ssp.sp.gov.br/estatistica/consultas>. Cada ano ocupa cerca de
   126 a 196 MB.
 - **OpenStreetMap**, via [OSMnx](https://github.com/gboeing/osmnx), para a rede
-  de ruas a pé e de carro.
-- **Photon (komoot)** para geocodificação de endereços, restrita à bbox de São Paulo.
+  de ruas a pé e de carro (a bicicleta usa a rede a pé).
+- **Photon (komoot)** para geocodificação de endereços e geocodificação reversa,
+  restrita à bbox de São Paulo.
 - **OpenFreeMap** para os tiles do mapa base.
 - **GeoSampa (Prefeitura de SP)**: pontos de iluminação pública, usados no ajuste noturno.
 - **dadoscrimesp.com.br**: referência complementar com dados agregados por
@@ -80,34 +132,61 @@ Leia antes de usar ou apresentar os resultados.
 
 ## Como funciona
 
-1. **Pipeline (offline)**: baixa as planilhas da SSP-SP, filtra ocorrências da
-   capital com coordenadas válidas e as classifica em categorias.
-2. **Modelo de risco (v2)**: agrega as ocorrências em uma grade H3 (resolução 9,
-   ~174 m de aresta). Cada ocorrência soma um peso por categoria e modo
-   (a pé ou carro), com decaimento temporal (meia-vida de 12 meses, janela de
-   24 meses, usando as planilhas de 2024 a 2026), por período do dia.
-   - **Taxa por movimento**: o score é dividido por um proxy de movimento de pessoas
-     (`footfall`), a partir do tipo de via da malha a pé: calçadões, corredores de
-     metrô/ônibus e avenidas pesam mais que ruas residenciais. O risco mistura taxa e
-     contagem bruta (β = 0,5).
-   - **Iluminação**: em noite e madrugada, o score é multiplicado por
-     `1 + 0,3 · (1 − luz)`, em que `luz` é a densidade de pontos de iluminação
-     pública do GeoSampa (0 a 1). Sem essa base, não há ajuste.
-   - **Bases auxiliares da SSP** (celulares e veículos subtraídos) foram avaliadas e
-     deixadas de fora: 87 a 89% dos registros já estão nas ocorrências principais,
-     e o restante soma menos de 1% da base.
-   - A pontuação final é normalizada em escala logarítmica entre 0 e 1.
-3. **Grafo viário**: a rede do OSM recebe, em cada trecho, tempo de percurso, o
-   risco médio para cada período, e nome e tipo da via (usados nas instruções).
-4. **Roteamento**: Dijkstra (igraph) com custo `tempo × (1 + α · risco)`. Os
-   perfis usam α = 0 (mais rápida), 2 (equilibrada) e 6 (mais segura). Rotas
-   quase idênticas são descartadas, e alternativas só aparecem se reduzirem a
-   exposição em pelo menos 5%.
-5. **API** em FastAPI, que também serve o frontend.
-6. **Frontend** estático (MapLibre GL JS e h3-js), sem etapa de build.
+```mermaid
+flowchart LR
+  subgraph Offline["Pipeline mensal (GitHub Actions)"]
+    SSP[("SSP-SP<br>planilhas .xlsx")] --> R[build_risk<br>grade H3 de risco]
+    GS[("GeoSampa<br>iluminação")] --> R
+    OSM[("OpenStreetMap<br>via OSMnx")] --> G[build_graph<br>grafos a pé e de carro]
+    R --> G
+    G --> V{validate_data}
+    V -- ok --> REL[("GitHub Release<br>sampanav-data.tar.gz")]
+  end
+  REL -- docker build --> API
+  subgraph Render["API (Render, 512 MB)"]
+    API[FastAPI + igraph<br>Dijkstra por perfil]
+  end
+  subgraph Vercel["Frontend (Vercel)"]
+    FE[HTML/CSS/JS sem build<br>MapLibre + h3-js]
+  end
+  FE -- "HTTPS /api" --> API
+  API -- geocodificação --> PH[("Photon")]
+```
 
-O contrato completo entre as partes (formato de dados, esquema da API, regras
-de risco) está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+1. **Ocorrências**: o pipeline baixa as planilhas da SSP-SP, fica com as ocorrências da
+   capital em espaços públicos, com coordenadas válidas, e as classifica em categorias
+   (roubo e furto a pedestre ou de veículo, agressão, crimes letais).
+2. **Modelo de risco**: as ocorrências são agregadas numa grade H3 (resolução 9, ~174 m
+   de aresta), por modo e por período do dia. Cada uma soma um peso por categoria e
+   modo, com decaimento temporal (meia-vida de 12 meses, janela de 24 meses).
+   - **Taxa por movimento**: o score é dividido por um proxy de fluxo de pessoas tirado
+     do tipo de via (calçadões, corredores de ônibus e avenidas pesam mais que ruas
+     residenciais), misturando taxa e contagem bruta com β = 0,5. Assim o Centro não
+     parece perigoso só por receber muita gente.
+   - **Iluminação**: à noite e de madrugada, o score é multiplicado por
+     `1 + 0,3 · (1 − luz)`, em que `luz` é a densidade de postes do GeoSampa (0 a 1).
+   - A pontuação final é normalizada em escala logarítmica entre 0 e 1.
+   - As bases auxiliares da SSP (celulares e veículos subtraídos) foram avaliadas e
+     deixadas de fora: 87 a 89% dos registros já estão na base principal.
+3. **Grafo viário**: cada trecho da rede do OSM recebe tempo de percurso, risco médio
+   por período, nome e tipo da via.
+4. **Roteamento**: Dijkstra (igraph) com custo `tempo × (1 + α · risco)`. A exposição de
+   uma rota é `Σ comprimento × risco`, em km equivalentes. Penalidades mais fortes (r², r³)
+   foram testadas e geravam rotas mais longas sem reduzir a exposição total.
+
+O contrato completo entre as partes (formatos de dados, esquema da API, regras de
+risco) está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+
+### Em números
+
+| Métrica | Valor |
+|---|---|
+| Ocorrências no modelo | 660 mil (set/2024 a ago/2026) |
+| Memória da API com os três modos | ~330 MB (limite do plano: 512 MB) |
+| Carga dos grafos | ~1 s em CPU comum |
+| Tempo de cálculo (3 perfis) | 60 a 300 ms; até ~700 ms em 20 km a pé com parada |
+| Resposta de `/api/routes` (gzip) | 2 a 21 KB |
+| Testes | 136 no backend, 65 unitários no frontend, smoke test no navegador |
 
 ## Requisitos
 
@@ -158,6 +237,10 @@ por padrão.
   node --test 'frontend/tests/unit/*.test.mjs'
   node frontend/tests/smoke/smoke.mjs  # com o frontend servido em localhost:8000 e Playwright instalado
   ```
+
+- **Capturas de tela do README**: `tools/screenshots/run.sh <pasta_dos_dados>` sobe a
+  API com os dados, desenha o mapa base, captura as cenas e otimiza as imagens em
+  `docs/img/` (detalhes em [`tools/screenshots/README.md`](tools/screenshots/README.md)).
 
 - **Desenvolvimento só do frontend**: abra <http://localhost:8000/?mock=1>. Nesse
   modo, `frontend/js/api.js` usa respostas falsas de `frontend/js/mock.js` em vez
@@ -232,7 +315,10 @@ SampaNav/
 ├── vercel.json             # deploy do frontend (Vercel)
 ├── .github/workflows/      # ci.yml e data-refresh.yml (mensal)
 ├── docs/
-│   └── ARQUITETURA.md      # contrato entre pipeline, API e frontend
+│   ├── ARQUITETURA.md      # contrato entre pipeline, API e frontend
+│   ├── LICENCAS-DADOS.md   # licenças e atribuições dos dados
+│   └── img/                # capturas usadas neste README
+├── tools/screenshots/      # gera as capturas com dados reais (Playwright)
 ├── pipeline/               # scripts offline
 │   ├── config.py           # pesos, categorias, períodos, caminhos e parâmetros v2
 │   ├── download_ssp.py     # baixa as planilhas da SSP-SP
@@ -263,8 +349,13 @@ SampaNav/
 │       ├── nav.js          # navegação com GPS
 │       ├── navui.js        # banner de navegação
 │       ├── icons.js        # ícones das manobras
+│       ├── speech.js       # instruções faladas
+│       ├── gpx.js          # exportação em GPX
 │       ├── history.js, urlstate.js  # histórico local e estado na URL
+│       ├── pwa.js          # registro do service worker e aviso de versão nova
 │       ├── format.js, main.js
+│   ├── sw.js, manifest.webmanifest  # PWA
+│   └── tests/              # testes unitários (node --test) e smoke test
 └── data/                   # gitignored
     ├── raw/                # planilhas da SSP, OSM e pontos de iluminação
     ├── processed/          # saídas do pipeline (parquet, npz, json)

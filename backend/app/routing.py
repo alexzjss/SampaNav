@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import math
 import os
 import threading
 import time
@@ -14,14 +13,12 @@ from pathlib import Path
 
 import numpy as np
 
-from backend.app.steps import build_steps
+from backend.app.steps import COSLAT, M_PER_DEG, build_steps
 from pipeline.config import DATA_PROCESSED, H3_RES, PERIODS, SP_BBOX
 
 log = logging.getLogger("sampanav")
 
 ROUTE_QUEUE_TIMEOUT_S = 20.0  # espera máxima pelo lock de cálculo antes de responder 503
-M_PER_DEG = 111_320.0
-COSLAT = math.cos(math.radians(-23.55))
 
 # (id, rótulo, alpha)
 PROFILES = [
@@ -62,20 +59,21 @@ DEFAULT_LEVEL_THRESHOLDS = (0.15, 0.35, 0.6)
 LEVELS = ("baixo", "moderado", "alto", "muito alto")
 
 
-def risk_level(avg: float, thresholds=DEFAULT_LEVEL_THRESHOLDS) -> str:
+def risk_level(avg: float, thresholds: tuple[float, ...] = DEFAULT_LEVEL_THRESHOLDS) -> str:
     for level, limit in zip(LEVELS, thresholds, strict=False):
         if avg < limit:
             return level
     return LEVELS[-1]
 
 
-def weighted_quantiles(values: np.ndarray, weights: np.ndarray, qs) -> tuple[float, ...]:
+def weighted_quantiles(values: np.ndarray, weights: np.ndarray, qs: tuple[float, ...]) -> tuple[float, ...]:
     order = np.argsort(values)
     cw = np.cumsum(weights[order])
     if cw.size == 0 or cw[-1] <= 0:
         return DEFAULT_LEVEL_THRESHOLDS
     idx = np.minimum(np.searchsorted(cw / cw[-1], qs), len(order) - 1)
-    return tuple(float(values[order][i]) for i in idx)
+    srt = values[order]
+    return tuple(float(srt[i]) for i in idx)
 
 
 def in_bbox(lat: float, lon: float) -> bool:
@@ -102,7 +100,7 @@ class RiskStore:
     int32 numa tabela de dicts únicos (poucos milhares), em vez de uma string por linha.
     """
 
-    def __init__(self, table=None):
+    def __init__(self, table=None) -> None:
         self.groups: dict[tuple[str, str], dict] = {}
         self._centers: dict[tuple[str, str], tuple[np.ndarray, np.ndarray]] = {}
         self._lock = threading.Lock()
@@ -134,11 +132,19 @@ class RiskStore:
     def from_parquet(cls, path: Path) -> RiskStore:
         if not path.exists():
             return cls(None)
+        import pyarrow as pa
         import pyarrow.parquet as pq
 
         names = set(pq.ParquetFile(path).schema_arrow.names)
         cols = [c for c in ("h3", "mode", "period", "risk", "top_categories") if c in names]
-        return cls(pq.read_table(path, columns=cols))
+        # pool do sistema (glibc): o mimalloc padrão do Arrow retém ~80 MB de RSS após a leitura
+        # e malloc_trim não o alcança; com o pool do sistema o trim_memory() devolve tudo.
+        prev = pa.default_memory_pool()
+        pa.set_memory_pool(pa.system_memory_pool())
+        try:
+            return cls(pq.read_table(path, columns=cols, use_threads=False))
+        finally:
+            pa.set_memory_pool(prev)
 
     def categories(self, mode: str, period: str, cells: np.ndarray) -> dict[str, int]:
         g = self.groups.get((mode, period))
@@ -152,7 +158,9 @@ class RiskStore:
                 out[k] = out.get(k, 0) + v
         return dict(sorted(out.items(), key=lambda kv: -kv[1]))
 
-    def cells_in_bbox(self, mode, period, bbox, min_risk=0.05, limit=20000):
+    def cells_in_bbox(
+        self, mode: str, period: str, bbox: list[float], min_risk: float = 0.05, limit: int = 20000
+    ) -> list[dict]:
         import h3.api.basic_int as h3i
 
         g = self.groups.get((mode, period))
@@ -511,7 +519,9 @@ def queue_timeout() -> float:
 
 
 class Engine:
-    def __init__(self, processed: Path = DATA_PROCESSED, modes=("walk", "drive", "bike"), load: bool = True):
+    def __init__(
+        self, processed: Path = DATA_PROCESSED, modes: tuple[str, ...] = ("walk", "drive", "bike"), load: bool = True
+    ):
         self.processed = Path(processed)
         self.modes = tuple(modes)
         self.graphs: dict[str, RoadGraph] = {}
@@ -520,6 +530,7 @@ class Engine:
         self.risk_store = RiskStore(None)
         self.meta: dict = {}
         self.ready = threading.Event()
+        self.load_error: str | None = None
         self._lock = threading.Lock()  # um cálculo por vez: limita o pico de memória
         if load:
             self.load()
@@ -549,6 +560,15 @@ class Engine:
         # recalcula o mesmo valor).
         threading.Thread(target=self._warm_thresholds, name="thresholds", daemon=True).start()
 
+    def load_safe(self) -> None:
+        """load() para thread de fundo: falha vira estado `error` em vez de ficar "loading" para sempre."""
+        try:
+            self.load()
+        except Exception as ex:  # noqa: BLE001 - qualquer falha de leitura deixa o servidor sem dados
+            log.exception("falha ao carregar os dados")
+            self.load_error = f"{type(ex).__name__}: {ex}"
+            self.ready.set()
+
     def _warm_thresholds(self) -> None:
         t0 = time.perf_counter()
         seen = set()
@@ -559,6 +579,7 @@ class Engine:
             for p in PERIODS:
                 if p in g.risk:
                     g.level_thresholds[p]  # noqa: B018 (dispara o cálculo)
+        trim_memory()
         log.info("limiares de nível aquecidos em %.1fs", time.perf_counter() - t0)
 
     def _load_meta(self) -> dict:
@@ -570,7 +591,10 @@ class Engine:
                 pass
         return {"synthetic": True} if self.risk_path and "synthetic" in self.risk_path.name else {}
 
-    def compute(self, mode: str, o, d, period: str, via=None) -> list[dict]:
+    def compute(
+        self, mode: str, o: tuple[float, float], d: tuple[float, float], period: str,
+        via: tuple[float, float] | None = None,
+    ) -> list[dict]:
         g = self.graphs.get(mode)
         if g is None:
             raise RoutingError(f"Grafo '{mode}' não carregado.")

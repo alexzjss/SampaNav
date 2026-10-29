@@ -224,7 +224,7 @@ export function createNavigator({ map, ui, recalc, onExit }) {
     try {
       const r = await recalc({ lat: lastFix.lat, lon: lastFix.lon });
       if (active && r) { begin(r); ui.show(true, r); ui.notice(''); }
-    } catch (e) { ui.notice(e.message || 'Não foi possível recalcular a rota.'); }
+    } catch (e) { ui.notice(e?.friendly && e.message ? e.message : 'Não foi possível recalcular a rota.'); }
     finally { busy = false; ui.recalcBusy(false); }
   }
 

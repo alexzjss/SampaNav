@@ -155,7 +155,7 @@ def extract_city(xlsx_path) -> list[tuple]:
             n = 0
             for r in rows:
                 n += 1
-                if r[i_city] == "S.PAULO" or r[i_ibge] == 3550308:
+                if r[i_city] == "S.PAULO" or (i_ibge is not None and r[i_ibge] == 3550308):
                     out.append(tuple(None if i is None else r[i] for i in cols))
             print(f"  {xlsx_path.name}:{name}: {n} linhas, acumulado SP {len(out)}")
     finally:

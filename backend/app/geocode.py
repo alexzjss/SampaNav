@@ -56,7 +56,7 @@ def parse(payload: dict) -> list[dict]:
             lon, lat = f["geometry"]["coordinates"][:2]
         except (KeyError, TypeError, ValueError):
             continue
-        label = _label(f.get("properties", {}))
+        label = _label(f.get("properties") or {})
         if not label or label in seen:
             continue
         seen.add(label)

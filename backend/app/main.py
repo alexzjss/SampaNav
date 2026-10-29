@@ -10,9 +10,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -178,14 +180,21 @@ def create_app(
     async def lifespan(app: FastAPI):
         if background_load:
             app.state.engine = Engine(processed, load=False)
-            threading.Thread(target=app.state.engine.load, name="engine-load", daemon=True).start()
+            threading.Thread(target=app.state.engine.load_safe, name="engine-load", daemon=True).start()
         else:
             app.state.engine = Engine(processed)
         yield
         await geo.close()
 
-    app = FastAPI(title="SampaNav", version="1.2.0", lifespan=lifespan)
+    app = FastAPI(title="SampaNav", version="1.3.0", lifespan=lifespan)
     app.state.limiter = RateLimiter(load_rates(rate_limits))
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_handler(_: Request, exc: RequestValidationError):
+        # sem o campo `input`: NaN/Infinity no corpo não são serializáveis em JSON (viraria 500)
+        errs = [{"type": e["type"], "loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
+        return JSONResponse({"detail": errs}, status_code=422)
+
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     origins = allowed_origins()
     if origins:
@@ -203,8 +212,13 @@ def create_app(
             m: {"nodes": g.n_nodes, "edges": g.n_edges} if (g := e.graphs.get(m)) else {"nodes": 0, "edges": 0}
             for m in ("walk", "drive", "bike")
         }
-        status = "loading" if not e.ready.is_set() else ("ok" if not e.missing else "degraded")
+        if e.load_error:
+            status = "error"
+        else:
+            status = "loading" if not e.ready.is_set() else ("ok" if not e.missing else "degraded")
         out = {"status": status, "graphs": graphs}
+        if e.load_error:
+            out["detail"] = f"Falha ao carregar os dados: {e.load_error}"
         if e.missing:
             out["missing"] = e.missing
             out["detail"] = (
@@ -240,6 +254,8 @@ def create_app(
     @app.post("/api/routes", response_model=RouteResponse, dependencies=[Depends(rate_limit("routes"))])
     def routes(req: RouteRequest):
         e = engine()
+        if e.load_error:
+            raise HTTPException(503, "Dados indisponíveis no servidor.")
         if not e.ready.is_set():
             raise HTTPException(503, "Servidor iniciando; tente novamente em instantes.")
         period = resolve_period(req.period)

@@ -333,7 +333,7 @@ Mudanças aditivas na API; clientes antigos continuam válidos.
 
 ### Modo `bike`
 - `mode: "walk" | "drive" | "bike"` em `/api/routes` e `/api/risk`.
-- Derivado em memória do grafo a pé (sem arquivo novo): `RoadGraph.bike_view()` cria uma visão que compartilha por referência o igraph, as coordenadas, o KD-tree e o risco; só o tempo de viagem muda. Velocidades (constantes no topo de `routing.py`): 4,2 m/s (15 km/h) padrão; `cycleway` 5,0 m/s; `footway`/`pedestrian`/`corridor` 1,3 m/s (bike empurrada); `steps` 0,5 m/s. Sem `edge_highway` no grafo, tudo a 4,2 m/s.
+- Derivado em memória do grafo a pé (sem arquivo novo): `RoadGraph.bike_view()` cria uma visão que compartilha por referência o igraph, as coordenadas, o KD-tree e o risco; só o tempo de viagem muda. Velocidades (constantes no topo de `routing.py`): 4,2 m/s (15 km/h) padrão; `cycleway` 5,0 m/s; `footway`/`pedestrian`/`corridor` 1,3 m/s (bike empurrada); `steps` 0,5 m/s. Sem `edge_highway` no grafo, tudo a 4,2 m/s. Observação (medida com os dados de 2026-10): a malha a pé gerada pelo OSMnx não traz arestas `cycleway`, então hoje a bike não prioriza ciclovias; isso exigiria um grafo próprio (`network_type="bike"`) ou manter as ciclovias na malha a pé.
 - Risco e categorias da bike = risco a pé (`risk_store` modo `walk`); `/api/risk?mode=bike` devolve as células a pé. Instruções dos passos usam o texto de `walk`.
 - Só existe se o grafo a pé carregou; senão `bike` entra em `missing`.
 - `/api/health`: `graphs.bike = {nodes, edges}` (iguais aos de `walk`). `/api/meta`: `modes` = modos realmente carregados, ex. `["walk","drive","bike"]`.

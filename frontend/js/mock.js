@@ -78,7 +78,7 @@ export async function routes({ origin, destination, mode, period, via = null }) 
   await delay(500);
   const inSp = (p) => p.lat > -24.01 && p.lat < -23.35 && p.lon > -46.83 && p.lon < -46.36;
   if (!inSp(origin) || !inSp(destination) || (via && !inSp(via))) {
-    const e = new Error('Origem ou destino fora do município de São Paulo.'); throw e;
+    const e = new Error('Origem ou destino fora do município de São Paulo.'); e.friendly = true; throw e;
   }
   const defs = [
     ['rapida', 'Mais rápida', 0, 0, 0.55, { roubo_pessoa: 41, furto_pessoa: 120, lesao: 9 }],
