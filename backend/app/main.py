@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -9,18 +10,27 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app import geocode as geo
-from backend.app.routing import PROFILES, Engine, RoutingError
+from backend.app.ratelimit import RateLimiter, load_rates, rate_limit
+from backend.app.routing import PROFILES, Engine, EngineBusy, RoutingError
 from pipeline.config import DATA_PROCESSED, PERIODS, ROOT
+
+log = logging.getLogger("sampanav")
+if not log.handlers and not logging.getLogger().handlers:  # uvicorn não configura loggers da aplicação
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+    log.addHandler(_h)
+    log.setLevel(logging.INFO)
 
 Mode = Literal["walk", "drive"]
 PeriodName = Literal["all", "madrugada", "manha", "tarde", "noite"]
+PeriodQuery = Literal["now", "all", "madrugada", "manha", "tarde", "noite"]
 
 
 class Point(BaseModel):
@@ -32,7 +42,7 @@ class RouteRequest(BaseModel):
     origin: Point
     destination: Point
     mode: Mode = "walk"
-    period: Literal["now", "all", "madrugada", "manha", "tarde", "noite"] = "now"
+    period: PeriodQuery = "now"
 
 
 class VsFastest(BaseModel):
@@ -103,6 +113,26 @@ class RiskCell(BaseModel):
     risk: float
 
 
+class ProfileInfo(BaseModel):
+    id: str
+    label: str
+    alpha: float
+
+
+class MetaResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    profiles: list[ProfileInfo]
+    periods: list[str]
+    generated_at: str | None = None
+    date_min: str | None = None
+    date_max: str | None = None
+    n_occurrences: int | None = None
+    categories: list[str] | dict | None = None
+    weights: dict | None = None
+    synthetic: bool | None = None
+
+
 def resolve_period(period: str, now: datetime | None = None) -> str:
     if period != "now":
         return period
@@ -131,9 +161,11 @@ def create_app(
     processed_dir: Path | None = None,
     frontend_dir: Path | None = None,
     background_load: bool | None = None,
+    rate_limits: dict | None = None,
 ) -> FastAPI:
     """background_load: carrega os grafos numa thread depois de abrir a porta (deploy com pouca CPU).
-    Padrão: variável SAMPANAV_BACKGROUND_LOAD=1; nos testes, carga síncrona."""
+    Padrão: variável SAMPANAV_BACKGROUND_LOAD=1; nos testes, carga síncrona.
+    rate_limits: {"routes"|"geocode"|"risk": req/min por IP, 0 desliga}; sobrepõe SAMPANAV_RATE_*."""
     processed = Path(processed_dir or os.environ.get("SAMPANAV_DATA_DIR") or DATA_PROCESSED)
     if background_load is None:
         background_load = os.environ.get("SAMPANAV_BACKGROUND_LOAD", "") == "1"
@@ -148,7 +180,8 @@ def create_app(
         yield
         await geo.close()
 
-    app = FastAPI(title="SampaNav", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="SampaNav", version="1.0.0", lifespan=lifespan)
+    app.state.limiter = RateLimiter(load_rates(rate_limits))
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     origins = allowed_origins()
     if origins:
@@ -176,21 +209,21 @@ def create_app(
         out["risk_source"] = e.risk_path.name if e.risk_path else None
         return out
 
-    @app.get("/api/meta")
+    @app.get("/api/meta", response_model=MetaResponse)
     def meta():
         m = dict(engine().meta)
         m["profiles"] = [{"id": i, "label": lbl, "alpha": a} for i, lbl, a in PROFILES]
         m["periods"] = list(PERIODS)
         return m
 
-    @app.get("/api/geocode", response_model=list[GeocodeItem])
+    @app.get("/api/geocode", response_model=list[GeocodeItem], dependencies=[Depends(rate_limit("geocode"))])
     async def geocode_ep(q: str = Query("", max_length=200)):
         try:
             return await geo.geocode(q)
         except geo.GeocodeError as e:
             raise HTTPException(502, str(e)) from e
 
-    @app.post("/api/routes", response_model=RouteResponse)
+    @app.post("/api/routes", response_model=RouteResponse, dependencies=[Depends(rate_limit("routes"))])
     def routes(req: RouteRequest):
         e = engine()
         if not e.ready.is_set():
@@ -202,6 +235,11 @@ def create_app(
             )
         except RoutingError as ex:
             raise HTTPException(400, str(ex)) from ex
+        except EngineBusy as ex:
+            log.warning("503 fila de cálculo cheia: %s", ex)
+            raise HTTPException(
+                503, "Servidor ocupado; tente novamente em instantes.", headers={"Retry-After": "5"}
+            ) from ex
         return {
             "mode": req.mode,
             "period": period,
@@ -209,8 +247,8 @@ def create_app(
             "data": {"date_min": e.meta.get("date_min"), "date_max": e.meta.get("date_max"), "source": "SSP-SP"},
         }
 
-    @app.get("/api/risk", response_model=list[RiskCell])
-    def risk(bbox: str, mode: Mode = "walk", period: str = "now"):
+    @app.get("/api/risk", response_model=list[RiskCell], dependencies=[Depends(rate_limit("risk"))])
+    def risk(bbox: str, mode: Mode = "walk", period: PeriodQuery = "now"):
         try:
             b = [float(x) for x in bbox.split(",")]
             if len(b) != 4:
@@ -218,8 +256,6 @@ def create_app(
         except ValueError:
             raise HTTPException(400, "bbox deve ser minLon,minLat,maxLon,maxLat") from None
         p = resolve_period(period)
-        if p not in PERIODS:
-            raise HTTPException(400, "período inválido")
         return engine().risk_store.cells_in_bbox(mode, p, b)
 
     fe = Path(frontend_dir) if frontend_dir else ROOT / "frontend"

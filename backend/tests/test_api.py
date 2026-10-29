@@ -84,6 +84,7 @@ def test_risk_endpoint_empty_without_parquet(client):
     r = client.get("/api/risk", params={"bbox": "-46.7,-23.6,-46.6,-23.5", "mode": "walk", "period": "noite"})
     assert r.status_code == 200 and r.json() == []
     assert client.get("/api/risk", params={"bbox": "x"}).status_code == 400
+    assert client.get("/api/risk", params={"bbox": "-46.7,-23.6,-46.6,-23.5", "period": "xx"}).status_code == 422
 
 
 def test_geocode_proxy(client, monkeypatch):
