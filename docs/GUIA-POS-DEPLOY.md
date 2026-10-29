@@ -35,7 +35,8 @@ ficaria preso em "Acordando o servidor". Se a URL da API mudar, repita:
 1. Edite `frontend/config.js`:
 
    ```js
-   window.SAMPANAV_CONFIG = { apiBase: 'https://<sua-api>.onrender.com' };
+   // troque só a URL; em localhost o app continua usando a mesma origem
+   apiBase: /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? '' : 'https://<sua-api>.onrender.com',
    ```
 
    Sem barra no final.

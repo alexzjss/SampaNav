@@ -268,7 +268,8 @@ está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md), seção 5.
 Três serviços gratuitos:
 
 - **Frontend na Vercel**: site estático de `frontend/` (`vercel.json`, sem build). A URL
-  da API fica em `frontend/config.js` (`apiBase`); vazio = mesma origem (dev local).
+  da API fica em `frontend/config.js` (`apiBase`, hoje `https://sampanav-api.onrender.com`); em
+  `localhost` o app usa a mesma origem (dev local).
 - **API no Render**: container Docker (`Dockerfile` e `render.yaml`) no plano free,
   com 512 MB de RAM. Dorme após 15 min sem uso e leva cerca de 1 a 2 min para acordar.
   As origens permitidas vêm de `ALLOWED_ORIGINS`.
