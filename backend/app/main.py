@@ -28,7 +28,7 @@ if not log.handlers and not logging.getLogger().handlers:  # uvicorn não config
     log.addHandler(_h)
     log.setLevel(logging.INFO)
 
-Mode = Literal["walk", "drive"]
+Mode = Literal["walk", "drive", "bike"]
 PeriodName = Literal["all", "madrugada", "manha", "tarde", "noite"]
 PeriodQuery = Literal["now", "all", "madrugada", "manha", "tarde", "noite"]
 
@@ -43,6 +43,7 @@ class RouteRequest(BaseModel):
     destination: Point
     mode: Mode = "walk"
     period: PeriodQuery = "now"
+    via: Point | None = None  # parada opcional entre origem e destino
 
 
 class VsFastest(BaseModel):
@@ -63,7 +64,7 @@ class Segment(BaseModel):
 class Step(BaseModel):
     maneuver: Literal[
         "depart", "continue", "slight-left", "left", "sharp-left",
-        "slight-right", "right", "sharp-right", "uturn", "arrive",
+        "slight-right", "right", "sharp-right", "uturn", "waypoint", "arrive",
     ]
     instruction: str
     street: str = ""
@@ -87,6 +88,8 @@ class RouteOut(BaseModel):
     geometry: LineString
     segments: list[Segment]
     steps: list[Step] = []
+    exposure_by_period: dict[str, float] = {}
+    level_by_period: dict[str, str] = {}
 
 
 class DataInfo(BaseModel):
@@ -99,6 +102,7 @@ class RouteResponse(BaseModel):
     mode: Mode
     period: PeriodName
     routes: list[RouteOut]
+    via: Point | None = None
     data: DataInfo
 
 
@@ -197,7 +201,7 @@ def create_app(
         e = engine()
         graphs = {
             m: {"nodes": g.n_nodes, "edges": g.n_edges} if (g := e.graphs.get(m)) else {"nodes": 0, "edges": 0}
-            for m in ("walk", "drive")
+            for m in ("walk", "drive", "bike")
         }
         status = "loading" if not e.ready.is_set() else ("ok" if not e.missing else "degraded")
         out = {"status": status, "graphs": graphs}
@@ -214,6 +218,7 @@ def create_app(
         m = dict(engine().meta)
         m["profiles"] = [{"id": i, "label": lbl, "alpha": a} for i, lbl, a in PROFILES]
         m["periods"] = list(PERIODS)
+        m["modes"] = list(engine().graphs)
         return m
 
     @app.get("/api/geocode", response_model=list[GeocodeItem], dependencies=[Depends(rate_limit("geocode"))])
@@ -240,7 +245,8 @@ def create_app(
         period = resolve_period(req.period)
         try:
             routes = e.compute(
-                req.mode, (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon), period
+                req.mode, (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon), period,
+                (req.via.lat, req.via.lon) if req.via else None,
             )
         except RoutingError as ex:
             raise HTTPException(400, str(ex)) from ex
@@ -253,6 +259,7 @@ def create_app(
             "mode": req.mode,
             "period": period,
             "routes": routes,
+            "via": req.via.model_dump() if req.via else None,
             "data": {"date_min": e.meta.get("date_min"), "date_max": e.meta.get("date_max"), "source": "SSP-SP"},
         }
 
@@ -265,7 +272,7 @@ def create_app(
         except ValueError:
             raise HTTPException(400, "bbox deve ser minLon,minLat,maxLon,maxLat") from None
         p = resolve_period(period)
-        return engine().risk_store.cells_in_bbox(mode, p, b)
+        return engine().risk_store.cells_in_bbox("walk" if mode == "bike" else mode, p, b)
 
     fe = Path(frontend_dir) if frontend_dir else ROOT / "frontend"
     if fe.is_dir():

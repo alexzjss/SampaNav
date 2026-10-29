@@ -19,7 +19,7 @@ MIN_LINK_M = 30.0  # trechos sem nome mais curtos que isto (ligações) são abs
 
 MANEUVERS = (
     "depart", "continue", "slight-left", "left", "sharp-left",
-    "slight-right", "right", "sharp-right", "uturn", "arrive",
+    "slight-right", "right", "sharp-right", "uturn", "waypoint", "arrive",
 )
 
 # primeiro termo do nome -> gênero (para "na/no", "pela/pelo")
@@ -83,7 +83,7 @@ def _place(name: str, mode: str, prep: str) -> str:
         art = {"em": {"f": "na", "m": "no", None: "em"}, "por": {"f": "pela", "m": "pelo", None: "por"}}[prep][g]
         return f"{art} {name}"
     base = {"em": ("no", "na"), "por": ("pelo", "pela")}[prep]
-    return f"{base[0]} caminho" if mode == "walk" else f"{base[1]} via sem nome"
+    return f"{base[0]} caminho" if mode in ("walk", "bike") else f"{base[1]} via sem nome"
 
 
 def instruction(maneuver: str, name: str, dist_m: float, mode: str) -> str:

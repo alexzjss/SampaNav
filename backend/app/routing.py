@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -38,6 +39,12 @@ MAX_SNAP_M = 1000.0
 SEGMENT_BIN = 0.1
 SEGMENT_MIN_M = 40.0
 CATEGORY_STEP_M = 30.0
+# Bicicleta: derivada do grafo a pé (mesma malha, só outro tempo de viagem).
+BIKE_SPEED_MS = 4.2  # ~15 km/h
+BIKE_CYCLEWAY_MS = 5.0
+BIKE_PUSH_MS = 1.3  # trechos em que se empurra a bike (passo de caminhada)
+BIKE_STEPS_MS = 0.5  # escadas
+BIKE_PUSH_HIGHWAYS = ("footway", "pedestrian", "steps", "corridor")
 
 
 class EngineBusy(Exception):
@@ -223,6 +230,7 @@ class RoadGraph:
         from scipy.spatial import cKDTree
 
         self.mode = mode
+        self.risk_mode = mode  # modo usado nas consultas ao RiskStore (bike usa o risco a pé)
         self.risk_store = risk or RiskStore(None)
         self.node_lat = np.asarray(a["node_lat"], np.float64)
         self.node_lon = np.asarray(a["node_lon"], np.float64)
@@ -259,6 +267,25 @@ class RoadGraph:
         del memb
         xy = np.column_stack([self.node_lon * COSLAT * M_PER_DEG, self.node_lat * M_PER_DEG])
         self.tree = cKDTree(xy[self._snap_ids])
+
+    def with_profile(self, mode: str, ttime: np.ndarray, risk_mode: str | None = None) -> RoadGraph:
+        """Visão do mesmo grafo com outro tempo de viagem; compartilha arrays, igraph e KD-tree por referência."""
+        v = copy.copy(self)
+        v.mode = mode
+        v.risk_mode = risk_mode or self.risk_mode
+        v.ttime = np.asarray(ttime, np.float32)
+        return v
+
+    def bike_view(self) -> RoadGraph:
+        """Perfil de bicicleta a partir do grafo a pé."""
+        speed = np.full(self.n_edges, BIKE_SPEED_MS, np.float64)
+        if self.edge_highway is not None:
+            hw = {name: i for i, name in enumerate(self.highway_table)}
+            for name, v in (("cycleway", BIKE_CYCLEWAY_MS), ("footway", BIKE_PUSH_MS), ("pedestrian", BIKE_PUSH_MS),
+                            ("corridor", BIKE_PUSH_MS), ("steps", BIKE_STEPS_MS)):
+                if name in hw:
+                    speed[self.edge_highway == hw[name]] = v
+        return self.with_profile("bike", self.length.astype(np.float64) / speed, risk_mode="walk")
 
     @classmethod
     def load(cls, mode: str, path: Path, risk: RiskStore | None = None) -> RoadGraph:
@@ -314,26 +341,38 @@ class RoadGraph:
         tot = le.sum()
         return float(le[mask].sum() / tot) if tot > 0 else 1.0
 
-    def routes(self, o: tuple[float, float], d: tuple[float, float], period: str) -> list[Route]:
+    def routes(
+        self, o: tuple[float, float], d: tuple[float, float], period: str, via: tuple[float, float] | None = None
+    ) -> list[Route]:
         src, dst = self.snap(*o), self.snap(*d)
         if src == dst:
             raise RoutingError("Origem e destino estão muito próximos.")
+        mid = self.snap(*via) if via is not None else None
+        if mid is not None and mid in (src, dst):
+            mid = None  # parada colada na origem/destino: ignorada
         chosen: list[Route] = []
-        cache: dict[float, np.ndarray] = {}
+        cache: dict[float, tuple[np.ndarray, int]] = {}
 
-        def path(a: float) -> np.ndarray:
+        def path(a: float) -> tuple[np.ndarray, int]:
+            """(arestas, índice em que começa o 2º trecho; 0 sem parada)."""
             if a not in cache:
-                cache[a] = self._path(src, dst, period, a)
+                if mid is None:
+                    cache[a] = (self._path(src, dst, period, a), 0)
+                else:
+                    p1, p2 = self._path(src, mid, period, a), self._path(mid, dst, period, a)
+                    cache[a] = (np.concatenate([p1, p2]), len(p1) if len(p1) and len(p2) else 0)
             return cache[a]
 
         for rid, label, alpha in PROFILES:
             a, prev = alpha, None
             while True:
-                edges = path(a)
+                edges, k1 = path(a)
                 if len(edges) == 0:
                     raise RoutingError("Não foi encontrado caminho entre origem e destino.")
                 if self._overlap(edges, chosen) <= OVERLAP_MAX:
                     cand = self._make_route(rid, label, a, edges, period)
+                    if mid is not None:
+                        cand.extra["via_edge"] = k1
                     best = min((r.exposure for r in chosen), default=None)
                     if best is None or cand.exposure <= best * (1 - MIN_EXPOSURE_GAIN):
                         chosen.append(cand)
@@ -346,6 +385,10 @@ class RoadGraph:
                 a = ALPHA_MAX if same_as_prev else next(x for x in ALPHA_LADDER if x > a)
         return chosen
 
+    def exposure_by_period(self, route: Route) -> dict[str, float]:
+        L = self.length[route.edges].astype(np.float64)
+        return {p: float((L * self.risk[p][route.edges]).sum() / 1000.0) for p in PERIODS if p != "all" and p in self.risk}
+
     # -- extras (passos, categorias, segmentos) -----------------------------
     def steps(self, route: Route) -> list[dict]:
         edges = route.edges
@@ -355,10 +398,25 @@ class RoadGraph:
             names = [self.name_table[i] for i in self.edge_name[edges].tolist()]
         else:
             names = [""] * len(edges)
-        return build_steps(
+        steps = build_steps(
             route.coords, starts, names, self.length[edges].astype(np.float64),
             self.ttime[edges].astype(np.float64), self.mode,
         )
+        k1 = route.extra.get("via_edge", 0)
+        if k1 and steps:
+            j = int(starts[k1])
+            wp = {
+                "maneuver": "waypoint",
+                "instruction": "Chegada à parada; siga em frente",
+                "street": "",
+                "distance_m": 0.0,
+                "duration_s": 0,
+                "location": [round(float(route.coords[j, 0]), 6), round(float(route.coords[j, 1]), 6)],
+                "geometry_index": j,
+            }
+            pos = next((i for i, st in enumerate(steps) if st["geometry_index"] >= j), len(steps) - 1)
+            steps.insert(pos, wp)
+        return steps
 
     def categories(self, route: Route, period: str) -> dict[str, int]:
         import h3.api.basic_int as h3i
@@ -376,7 +434,7 @@ class RoadGraph:
         cells = np.unique(
             np.fromiter((h3i.latlng_to_cell(a, b, H3_RES) for a, b in zip(lat.tolist(), lon.tolist(), strict=False)), np.uint64, len(lat))
         )
-        return self.risk_store.categories(self.mode, period, cells)
+        return self.risk_store.categories(self.risk_mode, period, cells)
 
     def segments(self, route: Route, period: str) -> list[dict]:
         rk = self.risk[period]
@@ -453,7 +511,7 @@ def queue_timeout() -> float:
 
 
 class Engine:
-    def __init__(self, processed: Path = DATA_PROCESSED, modes=("walk", "drive"), load: bool = True):
+    def __init__(self, processed: Path = DATA_PROCESSED, modes=("walk", "drive", "bike"), load: bool = True):
         self.processed = Path(processed)
         self.modes = tuple(modes)
         self.graphs: dict[str, RoadGraph] = {}
@@ -472,6 +530,12 @@ class Engine:
         self.risk_store = RiskStore.from_parquet(self.risk_path) if self.risk_path else RiskStore(None)
         self.meta = self._load_meta()
         for m in self.modes:
+            if m == "bike":  # derivado do grafo a pé, sem arquivo próprio
+                if "walk" in self.graphs:
+                    self.graphs[m] = self.graphs["walk"].bike_view()
+                else:
+                    self.missing.append(m)
+                continue
             p = self.processed / f"graph_{m}.npz"
             if p.exists():
                 self.graphs[m] = RoadGraph.load(m, p, self.risk_store)
@@ -480,6 +544,22 @@ class Engine:
         trim_memory()
         self.ready.set()
         log.info("engine carregado em %.1fs grafos=%s ausentes=%s", time.perf_counter() - t0, list(self.graphs), self.missing)
+        # Cada rota agora usa os limiares dos 4 períodos; calculá-los na primeira rota levaria
+        # vários segundos com 0,1 CPU. Aquece em segundo plano (a corrida com uma rota só
+        # recalcula o mesmo valor).
+        threading.Thread(target=self._warm_thresholds, name="thresholds", daemon=True).start()
+
+    def _warm_thresholds(self) -> None:
+        t0 = time.perf_counter()
+        seen = set()
+        for g in self.graphs.values():
+            if id(g.level_thresholds) in seen:  # bike compartilha os limiares do walk
+                continue
+            seen.add(id(g.level_thresholds))
+            for p in PERIODS:
+                if p in g.risk:
+                    g.level_thresholds[p]  # noqa: B018 (dispara o cálculo)
+        log.info("limiares de nível aquecidos em %.1fs", time.perf_counter() - t0)
 
     def _load_meta(self) -> dict:
         p = self.processed / "risk_meta.json"
@@ -490,11 +570,11 @@ class Engine:
                 pass
         return {"synthetic": True} if self.risk_path and "synthetic" in self.risk_path.name else {}
 
-    def compute(self, mode: str, o, d, period: str) -> list[dict]:
+    def compute(self, mode: str, o, d, period: str, via=None) -> list[dict]:
         g = self.graphs.get(mode)
         if g is None:
             raise RoutingError(f"Grafo '{mode}' não carregado.")
-        for lat, lon in (o, d):
+        for lat, lon in (o, d) + ((via,) if via else ()):
             if not in_bbox(lat, lon):
                 raise RoutingError("Ponto fora da cidade de São Paulo.")
         timeout = queue_timeout()
@@ -503,7 +583,7 @@ class Engine:
             raise EngineBusy(f"lock não obtido em {timeout:g}s")
         t1 = time.perf_counter()
         try:
-            routes = g.routes(o, d, period)
+            routes = g.routes(o, d, period, via)
             out = self._serialize(g, routes, period)
         finally:
             self._lock.release()
@@ -520,6 +600,7 @@ class Engine:
         out = []
         for r in routes:
             dpct = (r.duration_s - base.duration_s) / base.duration_s * 100 if base.duration_s else 0.0
+            ebp = g.exposure_by_period(r)
             epct = (r.exposure - base.exposure) / base.exposure * 100 if base.exposure else 0.0
             out.append(
                 {
@@ -531,6 +612,11 @@ class Engine:
                     "exposure": round(r.exposure, 3),
                     "avg_risk": round(r.avg_risk, 3),
                     "risk_level": risk_level(r.avg_risk, g.level_thresholds[period]),
+                    "exposure_by_period": {p: round(v, 3) for p, v in ebp.items()},
+                    "level_by_period": {
+                        p: risk_level(v / (r.distance_m / 1000.0) if r.distance_m > 0 else 0.0, g.level_thresholds[p])
+                        for p, v in ebp.items()
+                    },
                     "vs_fastest": {"duration_pct": round(dpct, 1), "exposure_pct": round(epct, 1)},
                     "categories": g.categories(r, period),
                     "geometry": {"type": "LineString", "coordinates": np.round(r.coords, 6).tolist()},
